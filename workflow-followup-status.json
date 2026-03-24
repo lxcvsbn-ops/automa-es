@@ -1,0 +1,465 @@
+{
+  "name": "Follow-up por Mudança de Status",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "node-schedule-trigger",
+      "name": "A cada 1 minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAllRows",
+        "documentId": {
+          "__rl": true,
+          "value": "SEU_GOOGLE_SHEET_ID_AQUI",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "options": {
+          "headerRow": 1,
+          "returnAllMatches": true
+        }
+      },
+      "id": "node-get-sheet",
+      "name": "Buscar Todos os Chamados",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [420, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "SEU_CREDENTIAL_GOOGLE_ID",
+          "name": "Google Sheets"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-status-changed",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "={{ $json.ultimo_status_enviado }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "cond-not-aberto",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "aberto",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "cond-email-exists",
+              "leftValue": "={{ $json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "cond-message-id-exists",
+              "leftValue": "={{ $json.gmail_message_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "node-filter-changed",
+      "name": "Filtrar Status Alterado",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "output": "single",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "rule-em-analise",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "Em análise",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Em Análise"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "rule-resolvido",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "Resolvido",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Resolvido"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "id": "rule-aguardando",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "Aguardando retorno",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Aguardando Retorno"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-switch-status",
+      "name": "Switch por Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "em-analise-subject",
+              "name": "assunto_email",
+              "value": "=Re: Chamado #{{ $json.id_chamado }} - {{ $json.titulo }}",
+              "type": "string"
+            },
+            {
+              "id": "em-analise-body",
+              "name": "corpo_email",
+              "value": "=<p>Olá, <strong>{{ $json.nome_solicitante }}</strong>!</p>\n<p>Informamos que seu chamado <strong>#{{ $json.id_chamado }} - {{ $json.titulo }}</strong> está agora <strong>Em Análise</strong> pela nossa equipe.</p>\n<p>Estamos trabalhando na resolução e em breve traremos novidades. Caso precise de mais informações, basta responder este e-mail.</p>\n<br>\n<p>Atenciosamente,<br><strong>Equipe de Suporte</strong></p>",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "node-template-em-analise",
+      "name": "Template: Em Análise",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1080, 120]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "resolvido-subject",
+              "name": "assunto_email",
+              "value": "=Re: Chamado #{{ $json.id_chamado }} - {{ $json.titulo }}",
+              "type": "string"
+            },
+            {
+              "id": "resolvido-body",
+              "name": "corpo_email",
+              "value": "=<p>Olá, <strong>{{ $json.nome_solicitante }}</strong>!</p>\n<p>Temos o prazer de informar que seu chamado <strong>#{{ $json.id_chamado }} - {{ $json.titulo }}</strong> foi <strong>Resolvido</strong>!</p>\n<p>Esperamos ter atendido às suas expectativas. Caso o problema persista ou tenha novas dúvidas, fique à vontade para abrir um novo chamado.</p>\n<br>\n<p>Atenciosamente,<br><strong>Equipe de Suporte</strong></p>",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "node-template-resolvido",
+      "name": "Template: Resolvido",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aguardando-subject",
+              "name": "assunto_email",
+              "value": "=Re: Chamado #{{ $json.id_chamado }} - {{ $json.titulo }}",
+              "type": "string"
+            },
+            {
+              "id": "aguardando-body",
+              "name": "corpo_email",
+              "value": "=<p>Olá, <strong>{{ $json.nome_solicitante }}</strong>!</p>\n<p>Seu chamado <strong>#{{ $json.id_chamado }} - {{ $json.titulo }}</strong> está <strong>Aguardando o seu Retorno</strong>.</p>\n<p>Para prosseguirmos com o atendimento, por favor responda este e-mail com as informações solicitadas ou entre em contato conosco.</p>\n<br>\n<p>Atenciosamente,<br><strong>Equipe de Suporte</strong></p>",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "node-template-aguardando",
+      "name": "Template: Aguardando Retorno",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1080, 480]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "reply",
+        "messageId": "={{ $json.gmail_message_id }}",
+        "message": "={{ $json.corpo_email }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "node-gmail-reply",
+      "name": "Responder E-mail na Thread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1300, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "SEU_CREDENTIAL_GMAIL_ID",
+          "name": "Gmail"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "SEU_GOOGLE_SHEET_ID_AQUI",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_chamado": "={{ $json.id_chamado }}",
+            "ultimo_status_enviado": "={{ $json.status }}"
+          },
+          "matchingColumns": ["id_chamado"],
+          "schema": [
+            {
+              "id": "id_chamado",
+              "displayName": "id_chamado",
+              "required": true,
+              "defaultMatch": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ultimo_status_enviado",
+              "displayName": "ultimo_status_enviado",
+              "required": false,
+              "defaultMatch": false,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-update-sheet",
+      "name": "Atualizar Status Enviado",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1520, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "SEU_CREDENTIAL_GOOGLE_ID",
+          "name": "Google Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "A cada 1 minuto": {
+      "main": [
+        [
+          {
+            "node": "Buscar Todos os Chamados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Todos os Chamados": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Status Alterado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Status Alterado": {
+      "main": [
+        [
+          {
+            "node": "Switch por Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch por Status": {
+      "main": [
+        [
+          {
+            "node": "Template: Em Análise",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Template: Resolvido",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Template: Aguardando Retorno",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template: Em Análise": {
+      "main": [
+        [
+          {
+            "node": "Responder E-mail na Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template: Resolvido": {
+      "main": [
+        [
+          {
+            "node": "Responder E-mail na Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template: Aguardando Retorno": {
+      "main": [
+        [
+          {
+            "node": "Responder E-mail na Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder E-mail na Thread": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Status Enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "suporte" },
+    { "name": "follow-up" }
+  ],
+  "triggerCount": 1,
+  "versionId": "1"
+}
