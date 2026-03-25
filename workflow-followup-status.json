@@ -1,5 +1,5 @@
 {
-  "name": "Follow-up por Mudança de Status",
+  "name": "FOLLOW_UP_STATUS",
   "nodes": [
     {
       "parameters": {
@@ -7,44 +7,45 @@
           "interval": [
             {
               "field": "minutes",
-              "minutesInterval": 1
+              "minutesInterval": 2
             }
           ]
         }
       },
-      "id": "node-schedule-trigger",
-      "name": "A cada 1 minuto",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 300]
+      "position": [200, 300],
+      "id": "f1a2b3c4-d5e6-7890-abcd-ef1234567890",
+      "name": "A cada 2 minutos"
     },
     {
       "parameters": {
         "operation": "getAllRows",
         "documentId": {
           "__rl": true,
-          "value": "SEU_GOOGLE_SHEET_ID_AQUI",
-          "mode": "id"
+          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
+          "mode": "list",
+          "cachedResultName": "CASOS_CRITICOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": "gid=0",
-          "mode": "id"
+          "mode": "list",
+          "cachedResultName": "P\u00e1gina1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
         },
-        "options": {
-          "headerRow": 1,
-          "returnAllMatches": true
-        }
+        "options": {}
       },
-      "id": "node-get-sheet",
-      "name": "Buscar Todos os Chamados",
       "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
+      "typeVersion": 4.7,
       "position": [420, 300],
+      "id": "a2b3c4d5-e6f7-8901-bcde-f12345678901",
+      "name": "Buscar Chamados na Planilha",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "SEU_CREDENTIAL_GOOGLE_ID",
-          "name": "Google Sheets"
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
         }
       }
     },
@@ -58,236 +59,72 @@
           },
           "conditions": [
             {
-              "id": "cond-status-changed",
-              "leftValue": "={{ $json.status }}",
-              "rightValue": "={{ $json.ultimo_status_enviado }}",
+              "id": "cond-thread-exists",
+              "leftValue": "={{ $json['Thread ID'] }}",
+              "rightValue": "",
               "operator": {
                 "type": "string",
-                "operation": "notEquals"
+                "operation": "notEmpty"
               }
             },
             {
               "id": "cond-not-aberto",
-              "leftValue": "={{ $json.status }}",
-              "rightValue": "aberto",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "Aberto",
               "operator": {
                 "type": "string",
                 "operation": "notEquals"
               }
             },
             {
-              "id": "cond-email-exists",
-              "leftValue": "={{ $json.email }}",
-              "rightValue": "",
+              "id": "cond-status-changed",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "={{ $json['Ultimo Status Enviado'] }}",
               "operator": {
                 "type": "string",
-                "operation": "notEmpty"
-              }
-            },
-            {
-              "id": "cond-message-id-exists",
-              "leftValue": "={{ $json.gmail_message_id }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
+                "operation": "notEquals"
               }
             }
           ],
           "combinator": "and"
         }
       },
-      "id": "node-filter-changed",
-      "name": "Filtrar Status Alterado",
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.2,
-      "position": [640, 300]
+      "position": [640, 300],
+      "id": "b3c4d5e6-f7a8-9012-cdef-012345678902",
+      "name": "Filtrar Status Alterado"
     },
     {
       "parameters": {
-        "mode": "rules",
-        "output": "single",
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "loose"
-                },
-                "conditions": [
-                  {
-                    "id": "rule-em-analise",
-                    "leftValue": "={{ $json.status }}",
-                    "rightValue": "Em análise",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "Em Análise"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "loose"
-                },
-                "conditions": [
-                  {
-                    "id": "rule-resolvido",
-                    "leftValue": "={{ $json.status }}",
-                    "rightValue": "Resolvido",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "Resolvido"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "loose"
-                },
-                "conditions": [
-                  {
-                    "id": "rule-aguardando",
-                    "leftValue": "={{ $json.status }}",
-                    "rightValue": "Aguardando retorno",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "Aguardando Retorno"
-            }
-          ]
-        },
+        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira': 'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca': 'allini.pianca@fazcapital.com.br',\n  'Athos Baruk': 'athos.baruk@fazcapital.com.br',\n  'Fabio Borges': 'fabio.borges@fazcapital.com.br'\n};\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const status = (d['Status'] || '').trim();\n  const statusLower = status.toLowerCase();\n  const ultimoEnviado = (d['Ultimo Status Enviado'] || '').trim().toLowerCase();\n\n  // Seguran\u00e7a extra: ignora se status n\u00e3o mudou ou ainda \u00e9 Aberto\n  if (statusLower === ultimoEnviado || statusLower === 'aberto') continue;\n\n  const responsavel = (d['Respons\u00e1vel'] || '').split('|')[0].trim();\n  const emailDest = MAPA_EMAILS[responsavel] || '';\n  if (!emailDest) continue;\n\n  const idCaso   = d['ID Caso'] || '';\n  const cliente  = d['C\u00f3digo Cliente'] || '';\n  const assunto  = d['Assunto'] || '';\n  const proto    = d['Protocolo N1'] || '';\n  const threadId = d['Thread ID'] || '';\n\n  const subjectLine = `Re: [SUBIR BV] ${idCaso} | Cliente ${cliente} | ${assunto}`;\n\n  let corpo = '';\n\n  if (statusLower === 'em an\u00e1lise') {\n    corpo = `<p>Prezado(a),</p><p>Informamos que o caso <strong>${idCaso}</strong> est\u00e1 agora <strong>Em An\u00e1lise</strong> pela nossa equipe. \uD83D\uDD0D</p><p>\uD83D\uDCCC Protocolo: ${proto}<br>\uD83D\uDC64 Cliente: ${cliente}<br>\uD83D\uDCDD Assunto: ${assunto}</p><p>Estamos trabalhando na resolu\u00e7\u00e3o e em breve traremos novidades. Caso possua novas informa\u00e7\u00f5es, responda este e-mail.</p><br><p>Atenciosamente,</p>`;\n  } else if (statusLower === 'resolvido') {\n    corpo = `<p>Prezado(a),</p><p>Informamos que o caso <strong>${idCaso}</strong> foi <strong>Resolvido</strong>! \u2705</p><p>\uD83D\uDCCC Protocolo: ${proto}<br>\uD83D\uDC64 Cliente: ${cliente}<br>\uD83D\uDCDD Assunto: ${assunto}</p><p>Caso o problema persista ou tenha novas d\u00favidas, responda este e-mail para reabrir o caso.</p><br><p>Atenciosamente,</p>`;\n  } else if (statusLower === 'aguardando retorno') {\n    corpo = `<p>Prezado(a),</p><p>O caso <strong>${idCaso}</strong> est\u00e1 <strong>Aguardando o seu Retorno</strong>. \u23F3</p><p>\uD83D\uDCCC Protocolo: ${proto}<br>\uD83D\uDC64 Cliente: ${cliente}<br>\uD83D\uDCDD Assunto: ${assunto}</p><p>Por favor, responda este e-mail com as informa\u00e7\u00f5es solicitadas para prosseguirmos com o atendimento.</p><br><p>Atenciosamente,</p>`;\n  }\n\n  if (!corpo) continue;\n\n  results.push({\n    json: {\n      ...d,\n      corpo_email: corpo,\n      email_destinatario: emailDest,\n      assunto_email: subjectLine,\n      request_body: {\n        message: {\n          subject: subjectLine,\n          body: {\n            contentType: 'HTML',\n            content: corpo\n          },\n          toRecipients: [\n            { emailAddress: { address: emailDest } }\n          ],\n          ccRecipients: [\n            { emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }\n          ],\n          internetMessageHeaders: [\n            { name: 'In-Reply-To', value: threadId },\n            { name: 'References', value: threadId }\n          ]\n        }\n      }\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "id": "c4d5e6f7-a8b9-0123-defa-123456789013",
+      "name": "Montar Corpo do E-mail"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/sendMail",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
         "options": {}
       },
-      "id": "node-switch-status",
-      "name": "Switch por Status",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.2,
-      "position": [860, 300]
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "em-analise-subject",
-              "name": "assunto_email",
-              "value": "=Re: Chamado #{{ $json.id_chamado }} - {{ $json.titulo }}",
-              "type": "string"
-            },
-            {
-              "id": "em-analise-body",
-              "name": "corpo_email",
-              "value": "=<p>Olá, <strong>{{ $json.nome_solicitante }}</strong>!</p>\n<p>Informamos que seu chamado <strong>#{{ $json.id_chamado }} - {{ $json.titulo }}</strong> está agora <strong>Em Análise</strong> pela nossa equipe.</p>\n<p>Estamos trabalhando na resolução e em breve traremos novidades. Caso precise de mais informações, basta responder este e-mail.</p>\n<br>\n<p>Atenciosamente,<br><strong>Equipe de Suporte</strong></p>",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      },
-      "id": "node-template-em-analise",
-      "name": "Template: Em Análise",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [1080, 120]
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "resolvido-subject",
-              "name": "assunto_email",
-              "value": "=Re: Chamado #{{ $json.id_chamado }} - {{ $json.titulo }}",
-              "type": "string"
-            },
-            {
-              "id": "resolvido-body",
-              "name": "corpo_email",
-              "value": "=<p>Olá, <strong>{{ $json.nome_solicitante }}</strong>!</p>\n<p>Temos o prazer de informar que seu chamado <strong>#{{ $json.id_chamado }} - {{ $json.titulo }}</strong> foi <strong>Resolvido</strong>!</p>\n<p>Esperamos ter atendido às suas expectativas. Caso o problema persista ou tenha novas dúvidas, fique à vontade para abrir um novo chamado.</p>\n<br>\n<p>Atenciosamente,<br><strong>Equipe de Suporte</strong></p>",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      },
-      "id": "node-template-resolvido",
-      "name": "Template: Resolvido",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [1080, 300]
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "aguardando-subject",
-              "name": "assunto_email",
-              "value": "=Re: Chamado #{{ $json.id_chamado }} - {{ $json.titulo }}",
-              "type": "string"
-            },
-            {
-              "id": "aguardando-body",
-              "name": "corpo_email",
-              "value": "=<p>Olá, <strong>{{ $json.nome_solicitante }}</strong>!</p>\n<p>Seu chamado <strong>#{{ $json.id_chamado }} - {{ $json.titulo }}</strong> está <strong>Aguardando o seu Retorno</strong>.</p>\n<p>Para prosseguirmos com o atendimento, por favor responda este e-mail com as informações solicitadas ou entre em contato conosco.</p>\n<br>\n<p>Atenciosamente,<br><strong>Equipe de Suporte</strong></p>",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      },
-      "id": "node-template-aguardando",
-      "name": "Template: Aguardando Retorno",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [1080, 480]
-    },
-    {
-      "parameters": {
-        "resource": "message",
-        "operation": "reply",
-        "messageId": "={{ $json.gmail_message_id }}",
-        "message": "={{ $json.corpo_email }}",
-        "options": {
-          "appendAttribution": false
-        }
-      },
-      "id": "node-gmail-reply",
-      "name": "Responder E-mail na Thread",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.1,
-      "position": [1300, 300],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300],
+      "id": "d5e6f7a8-b9c0-1234-efab-234567890124",
+      "name": "Enviar Follow-up na Thread",
       "credentials": {
-        "gmailOAuth2": {
-          "id": "SEU_CREDENTIAL_GMAIL_ID",
-          "name": "Gmail"
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
         }
       }
     },
@@ -296,170 +133,109 @@
         "operation": "update",
         "documentId": {
           "__rl": true,
-          "value": "SEU_GOOGLE_SHEET_ID_AQUI",
-          "mode": "id"
+          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
+          "mode": "list",
+          "cachedResultName": "CASOS_CRITICOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
         },
         "sheetName": {
           "__rl": true,
           "value": "gid=0",
-          "mode": "id"
+          "mode": "list",
+          "cachedResultName": "P\u00e1gina1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
         },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "id_chamado": "={{ $json.id_chamado }}",
-            "ultimo_status_enviado": "={{ $json.status }}"
+            "ID Caso": "={{ $('Montar Corpo do E-mail').item.json['ID Caso'] }}",
+            "Ultimo Status Enviado": "={{ $('Montar Corpo do E-mail').item.json['Status'] }}"
           },
-          "matchingColumns": ["id_chamado"],
+          "matchingColumns": ["ID Caso"],
           "schema": [
             {
-              "id": "id_chamado",
-              "displayName": "id_chamado",
+              "id": "ID Caso",
+              "displayName": "ID Caso",
               "required": true,
               "defaultMatch": true,
+              "display": true,
               "type": "string",
               "canBeUsedToMatch": true
             },
             {
-              "id": "ultimo_status_enviado",
-              "displayName": "ultimo_status_enviado",
+              "id": "Ultimo Status Enviado",
+              "displayName": "Ultimo Status Enviado",
               "required": false,
               "defaultMatch": false,
+              "display": true,
               "type": "string",
               "canBeUsedToMatch": false
             }
-          ]
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "id": "node-update-sheet",
-      "name": "Atualizar Status Enviado",
       "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
-      "position": [1520, 300],
+      "typeVersion": 4.7,
+      "position": [1300, 300],
+      "id": "e6f7a8b9-c0d1-2345-fabc-345678901235",
+      "name": "Atualizar Status Enviado",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "SEU_CREDENTIAL_GOOGLE_ID",
-          "name": "Google Sheets"
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
         }
       }
     }
   ],
   "connections": {
-    "A cada 1 minuto": {
+    "A cada 2 minutos": {
       "main": [
         [
-          {
-            "node": "Buscar Todos os Chamados",
-            "type": "main",
-            "index": 0
-          }
+          { "node": "Buscar Chamados na Planilha", "type": "main", "index": 0 }
         ]
       ]
     },
-    "Buscar Todos os Chamados": {
+    "Buscar Chamados na Planilha": {
       "main": [
         [
-          {
-            "node": "Filtrar Status Alterado",
-            "type": "main",
-            "index": 0
-          }
+          { "node": "Filtrar Status Alterado", "type": "main", "index": 0 }
         ]
       ]
     },
     "Filtrar Status Alterado": {
       "main": [
         [
-          {
-            "node": "Switch por Status",
-            "type": "main",
-            "index": 0
-          }
+          { "node": "Montar Corpo do E-mail", "type": "main", "index": 0 }
         ]
       ]
     },
-    "Switch por Status": {
+    "Montar Corpo do E-mail": {
       "main": [
         [
-          {
-            "node": "Template: Em Análise",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Template: Resolvido",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Template: Aguardando Retorno",
-            "type": "main",
-            "index": 0
-          }
+          { "node": "Enviar Follow-up na Thread", "type": "main", "index": 0 }
         ]
       ]
     },
-    "Template: Em Análise": {
+    "Enviar Follow-up na Thread": {
       "main": [
         [
-          {
-            "node": "Responder E-mail na Thread",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Template: Resolvido": {
-      "main": [
-        [
-          {
-            "node": "Responder E-mail na Thread",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Template: Aguardando Retorno": {
-      "main": [
-        [
-          {
-            "node": "Responder E-mail na Thread",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Responder E-mail na Thread": {
-      "main": [
-        [
-          {
-            "node": "Atualizar Status Enviado",
-            "type": "main",
-            "index": 0
-          }
+          { "node": "Atualizar Status Enviado", "type": "main", "index": 0 }
         ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1",
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": ""
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner"
   },
-  "staticData": null,
-  "tags": [
-    { "name": "suporte" },
-    { "name": "follow-up" }
-  ],
-  "triggerCount": 1,
-  "versionId": "1"
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
 }
