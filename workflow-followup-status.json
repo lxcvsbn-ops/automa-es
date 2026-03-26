@@ -20,26 +20,14 @@
     },
     {
       "parameters": {
-        "operation": "getAll",
-        "documentId": {
-          "__rl": true,
-          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
-          "mode": "list",
-          "cachedResultName": "CASOS_CRITICOS",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "gid=0",
-          "mode": "list",
-          "cachedResultName": "P\u00e1gina1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
-        },
-        "returnAll": true,
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/values/P%C3%A1gina1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
         "options": {}
       },
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [420, 300],
       "id": "a2b3c4d5-e6f7-8901-bcde-f12345678901",
       "name": "Buscar Chamados na Planilha",
@@ -49,6 +37,16 @@
           "name": "CASOS_CRITICOS"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Converte o retorno bruto da API do Google Sheets em array de objetos\nconst sheetData = $json.values;\nif (!sheetData || sheetData.length < 2) return [];\n\nconst headers = sheetData[0];\nconst results = [];\n\nfor (let i = 1; i < sheetData.length; i++) {\n  const row = sheetData[i];\n  if (!row || row.length === 0) continue;\n\n  const obj = {};\n  headers.forEach((header, idx) => {\n    obj[header] = row[idx] !== undefined ? row[idx] : '';\n  });\n\n  results.push({ json: obj });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300],
+      "id": "z9y8x7w6-v5u4-3210-tsr0-qponmlkjih01",
+      "name": "Transformar Dados da Planilha"
     },
     {
       "parameters": {
@@ -92,7 +90,7 @@
       },
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.2,
-      "position": [640, 300],
+      "position": [840, 300],
       "id": "b3c4d5e6-f7a8-9012-cdef-012345678902",
       "name": "Filtrar Status Alterado"
     },
@@ -102,7 +100,7 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 300],
+      "position": [1060, 300],
       "id": "c4d5e6f7-a8b9-0123-defa-123456789013",
       "name": "Montar Corpo do E-mail"
     },
@@ -119,7 +117,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1080, 300],
+      "position": [1280, 300],
       "id": "d5e6f7a8-b9c0-1234-efab-234567890124",
       "name": "Enviar Follow-up na Thread",
       "credentials": {
@@ -180,7 +178,7 @@
       },
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
-      "position": [1300, 300],
+      "position": [1500, 300],
       "id": "e6f7a8b9-c0d1-2345-fabc-345678901235",
       "name": "Atualizar Status Enviado",
       "credentials": {
@@ -196,6 +194,9 @@
       "main": [[{ "node": "Buscar Chamados na Planilha", "type": "main", "index": 0 }]]
     },
     "Buscar Chamados na Planilha": {
+      "main": [[{ "node": "Transformar Dados da Planilha", "type": "main", "index": 0 }]]
+    },
+    "Transformar Dados da Planilha": {
       "main": [[{ "node": "Filtrar Status Alterado", "type": "main", "index": 0 }]]
     },
     "Filtrar Status Alterado": {
