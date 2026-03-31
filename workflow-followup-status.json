@@ -4,12 +4,7 @@
     {
       "parameters": {
         "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 2
-            }
-          ]
+          "interval": [{ "field": "minutes", "minutesInterval": 2 }]
         }
       },
       "type": "n8n-nodes-base.scheduleTrigger",
@@ -64,6 +59,12 @@
               "operator": { "type": "string", "operation": "notEmpty" }
             },
             {
+              "id": "cond-status-not-empty",
+              "leftValue": "={{ $json['Status'] }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            },
+            {
               "id": "cond-not-aberto",
               "leftValue": "={{ $json['Status'] }}",
               "rightValue": "Aberto",
@@ -87,7 +88,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira': 'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca': 'allini.pianca@fazcapital.com.br',\n  'Athos Baruk': 'athos.baruk@fazcapital.com.br',\n  'Fabio Borges': 'fabio.borges@fazcapital.com.br'\n};\n\n// Remove acentos e normaliza para comparacao robusta\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();\n}\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const status  = (d['Status'] || '').trim();\n  const sNorm   = norm(status);\n  const uNorm   = norm(d['Ultimo Status Enviado']);\n\n  if (sNorm === uNorm || sNorm === 'aberto' || sNorm === '') continue;\n\n  const responsavel = (d['Respons\u00e1vel'] || '').split('|')[0].trim();\n  const emailDest   = MAPA_EMAILS[responsavel] || '';\n  if (!emailDest) continue;\n\n  const idCaso   = d['ID Caso'] || '';\n  const cliente  = d['C\u00f3digo Cliente'] || '';\n  const assunto  = d['Assunto'] || '';\n  const proto    = d['Protocolo N1'] || '';\n  const threadId = d['Thread ID'] || '';\n\n  const subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\n  let corpo = '';\n\n  if (sNorm.includes('analise')) {\n\n    corpo =\n      'Prezado(a),\\n\\n' +\n      '\uD83D\uDD0D Atualiza\u00e7\u00e3o de Status!\\n\\n' +\n      'O caso abaixo est\u00e1 Em An\u00e1lise pela nossa equipe.\\n\\n' +\n      'ID: ' + idCaso + '\\n' +\n      'Status: ' + status + '\\n\\n' +\n      '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n      '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n      '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n      'Estamos trabalhando na resolu\u00e7\u00e3o e em breve traremos novidades.\\n' +\n      'Caso possua novas informa\u00e7\u00f5es, responda este e-mail.\\n\\n\\n' +\n      'Atenciosamente,\\n\\n';\n\n  } else if (sNorm === 'resolvido') {\n\n    corpo =\n      'Prezado(a),\\n\\n' +\n      '\u2705 Caso Resolvido!\\n\\n' +\n      'O caso abaixo foi resolvido pela nossa equipe.\\n\\n' +\n      'ID: ' + idCaso + '\\n' +\n      'Status: ' + status + '\\n\\n' +\n      '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n      '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n      '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n      'Esperamos ter atendido \u00e0s suas expectativas.\\n' +\n      'Caso o problema persista, responda este e-mail para reabrir o caso.\\n\\n\\n' +\n      'Atenciosamente,\\n\\n';\n\n  } else if (sNorm.includes('aguard')) {\n\n    corpo =\n      'Prezado(a),\\n\\n' +\n      '\u23F3 Aguardando seu Retorno!\\n\\n' +\n      'O caso abaixo est\u00e1 aguardando informa\u00e7\u00f5es da sua parte.\\n\\n' +\n      'ID: ' + idCaso + '\\n' +\n      'Status: ' + status + '\\n\\n' +\n      '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n      '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n      '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n      'Por favor, responda este e-mail com as informa\u00e7\u00f5es solicitadas para prosseguirmos com o atendimento.\\n\\n\\n' +\n      'Atenciosamente,\\n\\n';\n\n  } else {\n\n    // Fallback: qualquer outro status diferente do anterior\n    corpo =\n      'Prezado(a),\\n\\n' +\n      '\uD83D\uDD04 Atualiza\u00e7\u00e3o de Status!\\n\\n' +\n      'O status do caso abaixo foi atualizado.\\n\\n' +\n      'ID: ' + idCaso + '\\n' +\n      'Status: ' + status + '\\n\\n' +\n      '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n      '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n      '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n      'Atenciosamente,\\n\\n';\n\n  }\n\n  results.push({\n    json: {\n      ...d,\n      corpo_email: corpo,\n      email_destinatario: emailDest,\n      assunto_email: subjectLine,\n      request_body: {\n        message: {\n          subject: subjectLine,\n          body: {\n            contentType: 'Text',\n            content: corpo\n          },\n          toRecipients: [\n            { emailAddress: { address: emailDest } }\n          ],\n          ccRecipients: [\n            { emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }\n          ],\n          internetMessageHeaders: [\n            { name: 'In-Reply-To', value: threadId },\n            { name: 'References', value: threadId }\n          ]\n        }\n      }\n    }\n  });\n}\n\nreturn results;"
+        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\n// Remove acentos e normaliza para comparacao robusta\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\n// Match exato ou parcial (\"Athos\" -> \"Athos Baruk\")\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const d = item.json;\n\n  // Debug: loga todos os campos recebidos\n  console.log('--- ITEM ---');\n  console.log('Status:', JSON.stringify(d['Status']));\n  console.log('Ultimo Status Enviado:', JSON.stringify(d['Ultimo Status Enviado']));\n  console.log('Responsavel:', JSON.stringify(d['Respons\u00e1vel'] || d['Responsavel']));\n  console.log('Thread ID:', JSON.stringify(d['Thread ID']));\n\n  const status = (d['Status'] || '').trim();\n  const sNorm  = norm(status);\n  const uNorm  = norm(d['Ultimo Status Enviado']);\n\n  if (sNorm === '') {\n    console.log('SKIP: Status vazio');\n    continue;\n  }\n  if (sNorm === 'aberto') {\n    console.log('SKIP: Status e Aberto');\n    continue;\n  }\n  if (sNorm === uNorm) {\n    console.log('SKIP: Status igual ao ultimo enviado (pos-normalizacao):', sNorm);\n    continue;\n  }\n\n  // Le Responsavel com e sem acento\n  const responsavel = (d['Respons\u00e1vel'] || d['Responsavel'] || '').split('|')[0].trim();\n  const emailDest   = findEmail(responsavel);\n\n  if (!emailDest) {\n    console.log('SKIP: Responsavel nao encontrado no mapa:', JSON.stringify(responsavel));\n    continue;\n  }\n\n  const idCaso   = d['ID Caso']          || '';\n  const cliente  = d['C\u00f3digo Cliente']   || d['Codigo_Cliente'] || '';\n  const assunto  = d['Assunto']           || '';\n  const proto    = d['Protocolo N1']      || '';\n  const threadId = d['Thread ID']         || '';\n\n  const subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\n  let corpo = '';\n\n  if (sNorm.includes('analise')) {\n    corpo =\n      'Prezado(a),\\n\\n' +\n      '\uD83D\uDD0D Atualiza\u00e7\u00e3o de Status!\\n\\n' +\n      'O caso abaixo est\u00e1 Em An\u00e1lise pela nossa equipe.\\n\\n' +\n      'ID: ' + idCaso + '\\n' +\n      'Status: ' + status + '\\n\\n' +\n      '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n      '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n      '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n      'Estamos trabalhando na resolu\u00e7\u00e3o e em breve traremos novidades.\\n' +\n      'Caso possua novas informa\u00e7\u00f5es, responda este e-mail.\\n\\n\\nAtenciosamente,\\n\\n';\n\n  } else if (sNorm === 'resolvido') {\n    corpo =\n      'Prezado(a),\\n\\n' +\n      '\u2705 Caso Resolvido!\\n\\n' +\n      'O caso abaixo foi resolvido pela nossa equipe.\\n\\n' +\n      'ID: ' + idCaso + '\\n' +\n      'Status: ' + status + '\\n\\n' +\n      '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n      '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n      '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n      'Esperamos ter atendido \u00e0s suas expectativas.\\n' +\n      'Caso o problema persista, responda este e-mail para reabrir o caso.\\n\\n\\nAtenciosamente,\\n\\n';\n\n  } else if (sNorm.includes('aguard')) {\n    corpo =\n      'Prezado(a),\\n\\n' +\n      '\u23F3 Aguardando seu Retorno!\\n\\n' +\n      'O caso abaixo est\u00e1 aguardando informa\u00e7\u00f5es da sua parte.\\n\\n' +\n      'ID: ' + idCaso + '\\n' +\n      'Status: ' + status + '\\n\\n' +\n      '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n      '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n      '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n      'Por favor, responda este e-mail com as informa\u00e7\u00f5es solicitadas para prosseguirmos.\\n\\n\\nAtenciosamente,\\n\\n';\n\n  } else {\n    // Fallback: qualquer outro status\n    corpo =\n      'Prezado(a),\\n\\n' +\n      '\uD83D\uDD04 Atualiza\u00e7\u00e3o de Status!\\n\\n' +\n      'O status do caso abaixo foi atualizado.\\n\\n' +\n      'ID: ' + idCaso + '\\n' +\n      'Status: ' + status + '\\n\\n' +\n      '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n      '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n      '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n      'Atenciosamente,\\n\\n';\n  }\n\n  console.log('OK: Montando e-mail para', emailDest, '| Status:', status);\n\n  results.push({\n    json: {\n      ...d,\n      corpo_email: corpo,\n      email_destinatario: emailDest,\n      assunto_email: subjectLine,\n      request_body: {\n        message: {\n          subject: subjectLine,\n          body: { contentType: 'Text', content: corpo },\n          toRecipients: [{ emailAddress: { address: emailDest } }],\n          ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }],\n          internetMessageHeaders: [\n            { name: 'In-Reply-To', value: threadId },\n            { name: 'References',  value: threadId }\n          ]\n        }\n      }\n    }\n  });\n}\n\nreturn results;"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -138,12 +139,12 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "ID Caso": "={{ $('Montar Corpo do E-mail').item.json['ID Caso'] }}",
+            "ID Caso":               "={{ $('Montar Corpo do E-mail').item.json['ID Caso'] }}",
             "Ultimo Status Enviado": "={{ $('Montar Corpo do E-mail').item.json['Status'] }}"
           },
           "matchingColumns": ["ID Caso"],
           "schema": [
-            { "id": "ID Caso", "displayName": "ID Caso", "required": true, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "ID Caso",               "displayName": "ID Caso",               "required": true,  "defaultMatch": true,  "display": true, "type": "string", "canBeUsedToMatch": true },
             { "id": "Ultimo Status Enviado", "displayName": "Ultimo Status Enviado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
           ],
           "attemptToConvertTypes": false,
@@ -165,24 +166,12 @@
     }
   ],
   "connections": {
-    "A cada 2 minutos": {
-      "main": [[{ "node": "Buscar Chamados na Planilha", "type": "main", "index": 0 }]]
-    },
-    "Buscar Chamados na Planilha": {
-      "main": [[{ "node": "Transformar Dados da Planilha", "type": "main", "index": 0 }]]
-    },
-    "Transformar Dados da Planilha": {
-      "main": [[{ "node": "Filtrar Status Alterado", "type": "main", "index": 0 }]]
-    },
-    "Filtrar Status Alterado": {
-      "main": [[{ "node": "Montar Corpo do E-mail", "type": "main", "index": 0 }]]
-    },
-    "Montar Corpo do E-mail": {
-      "main": [[{ "node": "Enviar Follow-up na Thread", "type": "main", "index": 0 }]]
-    },
-    "Enviar Follow-up na Thread": {
-      "main": [[{ "node": "Atualizar Status Enviado", "type": "main", "index": 0 }]]
-    }
+    "A cada 2 minutos":            { "main": [[{ "node": "Buscar Chamados na Planilha",  "type": "main", "index": 0 }]] },
+    "Buscar Chamados na Planilha": { "main": [[{ "node": "Transformar Dados da Planilha", "type": "main", "index": 0 }]] },
+    "Transformar Dados da Planilha":{ "main": [[{ "node": "Filtrar Status Alterado",       "type": "main", "index": 0 }]] },
+    "Filtrar Status Alterado":     { "main": [[{ "node": "Montar Corpo do E-mail",        "type": "main", "index": 0 }]] },
+    "Montar Corpo do E-mail":      { "main": [[{ "node": "Enviar Follow-up na Thread",    "type": "main", "index": 0 }]] },
+    "Enviar Follow-up na Thread":  { "main": [[{ "node": "Atualizar Status Enviado",      "type": "main", "index": 0 }]] }
   },
   "settings": {
     "executionOrder": "v1",
