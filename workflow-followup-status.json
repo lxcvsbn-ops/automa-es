@@ -68,7 +68,7 @@
           "conditions": [
             {
               "id": "cond-thread-exists",
-              "leftValue": "={{ $json['Thread ID'] }}",
+              "leftValue": "={{ $json['ID da thread'] || $json['Thread ID'] }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
@@ -96,7 +96,7 @@
             {
               "id": "cond-status-changed",
               "leftValue": "={{ $json['Status'] }}",
-              "rightValue": "={{ $json['Ultimo Status Enviado'] }}",
+              "rightValue": "={{ $json['Último Status Enviado'] || $json['Ultimo Status Enviado'] }}",
               "operator": {
                 "type": "string",
                 "operation": "notEquals"
@@ -117,7 +117,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst d = $json;\nconst status = (d['Status'] || '').trim();\nconst sNorm  = norm(status);\nconst uNorm  = norm(d['Ultimo Status Enviado']);\n\nif (sNorm === '' || sNorm === 'aberto' || sNorm === uNorm) {\n  console.log('SKIP pos-normalizacao:', sNorm, '==', uNorm);\n  return [];\n}\n\nconst responsavel = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailDest   = findEmail(responsavel);\n\nif (!emailDest) {\n  console.log('SKIP: responsavel nao encontrado:', responsavel);\n  return [];\n}\n\nconsole.log('OK preparando IA | Status:', status, '| Para:', emailDest);\n\nconst prompt =\n  'Você é um assistente de suporte ao cliente profissional da FAZ Capital.\\n' +\n  'Transforme a nota de status abaixo em um parágrafo de e-mail formal, em português do Brasil.\\n\\n' +\n  'Regras:\\n' +\n  '- Se houver texto entre aspas (\"), reescreva esse conteúdo de forma profissional e elaborada em terceira pessoa\\n' +\n  '- Se for uma solicitação ou pedido (ex: aguardando..., precisa...), reformule de forma cordial e clara\\n' +\n  '- Não invente informações - apenas reformule o que foi fornecido\\n' +\n  '- Seja conciso, direto e profissional\\n' +\n  '- NAO inclua saudacao (Prezado(a)), assinatura nem qualquer outro elemento alem do paragrafo\\n\\n' +\n  'Nota de status: \"' + status + '\"';\n\nreturn [{\n  json: {\n    ...d,\n    email_destinatario: emailDest,\n    openai_body: {\n      model: 'gpt-4o-mini',\n      max_tokens: 400,\n      messages: [{ role: 'user', content: prompt }]\n    }\n  }\n}];"
+        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst d = $json;\nconst status = (d['Status'] || '').trim();\nconst sNorm  = norm(status);\nconst uNorm  = norm(d['Último Status Enviado'] || d['Ultimo Status Enviado']);\n\nif (sNorm === '' || sNorm === 'aberto' || sNorm === uNorm) {\n  console.log('SKIP pos-normalizacao:', sNorm, '==', uNorm);\n  return [];\n}\n\nconst responsavel = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailDest   = findEmail(responsavel);\n\nif (!emailDest) {\n  console.log('SKIP: responsavel nao encontrado:', responsavel);\n  return [];\n}\n\nconsole.log('OK preparando IA | Status:', status, '| Para:', emailDest);\n\nconst prompt =\n  'Você é um assistente de suporte ao cliente profissional da FAZ Capital.\\n' +\n  'Transforme a nota de status abaixo em um parágrafo de e-mail formal, em português do Brasil.\\n\\n' +\n  'Regras:\\n' +\n  '- Se houver texto entre aspas (\"), reescreva esse conteúdo de forma profissional e elaborada em terceira pessoa\\n' +\n  '- Se for uma solicitação ou pedido (ex: aguardando..., precisa...), reformule de forma cordial e clara\\n' +\n  '- Não invente informações - apenas reformule o que foi fornecido\\n' +\n  '- Seja conciso, direto e profissional\\n' +\n  '- NAO inclua saudacao (Prezado(a)), assinatura nem qualquer outro elemento alem do paragrafo\\n\\n' +\n  'Nota de status: \"' + status + '\"';\n\nreturn [{\n  json: {\n    ...d,\n    email_destinatario: emailDest,\n    openai_body: {\n      model: 'gpt-4o-mini',\n      max_tokens: 400,\n      messages: [{ role: 'user', content: prompt }]\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -160,7 +160,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const textoAI = (\n  $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content\n) || '';\n\nif (!textoAI) {\n  console.log('AVISO: IA nao retornou texto. Resposta:', JSON.stringify($json));\n  return [];\n}\n\nconst d         = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso    = d['ID Caso']            || '';\nconst cliente   = d['Código Cliente']     || d['Codigo_Cliente'] || '';\nconst assunto   = d['Assunto']             || '';\nconst proto     = d['Protocolo N1']        || '';\nconst status    = (d['Status'] || '').trim();\nconst threadId  = d['Thread ID']           || '';\nconst emailDest = d['email_destinatario']  || '';\n\nif (!emailDest || !threadId) {\n  console.log('SKIP: emailDest ou threadId ausente');\n  return [];\n}\n\nconst subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  textoAI + '\\n\\n' +\n  'Status: ' + status + '\\n\\n' +\n  '📌 Protocolo: ' + proto + '\\n' +\n  '👤 Cliente: ' + cliente + '\\n\\n' +\n  '📝 Assunto Caso: ' + assunto + '\\n\\n' +\n  '\\n\\nAtenciosamente,\\n\\n';\n\nconsole.log('OK: e-mail montado para', emailDest, '| Status:', status);\n\nreturn [{\n  json: {\n    ...d,\n    corpo_email: corpo,\n    assunto_email: subjectLine,\n    request_body: {\n      message: {\n        subject: subjectLine,\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: emailDest } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }],\n        internetMessageHeaders: [\n          { name: 'In-Reply-To', value: threadId },\n          { name: 'References',  value: threadId }\n        ]\n      }\n    }\n  }\n}];"
+        "jsCode": "const textoAI = (\n  $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content\n) || '';\n\nif (!textoAI) {\n  console.log('AVISO: IA nao retornou texto. Resposta:', JSON.stringify($json));\n  return [];\n}\n\nconst d         = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso    = d['ID Caso']            || '';\nconst cliente   = d['Código Cliente']     || d['Codigo_Cliente'] || '';\nconst assunto   = d['Assunto']             || '';\nconst proto     = d['Protocolo N1']        || '';\nconst status    = (d['Status'] || '').trim();\nconst threadId  = (d['ID da thread'] || d['Thread ID'])           || '';\nconst emailDest = d['email_destinatario']  || '';\n\nif (!emailDest || !threadId) {\n  console.log('SKIP: emailDest ou threadId ausente');\n  return [];\n}\n\nconst subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  textoAI + '\\n\\n' +\n  'Status: ' + status + '\\n\\n' +\n  '📌 Protocolo: ' + proto + '\\n' +\n  '👤 Cliente: ' + cliente + '\\n\\n' +\n  '📝 Assunto Caso: ' + assunto + '\\n\\n' +\n  '\\n\\nAtenciosamente,\\n\\n';\n\nconsole.log('OK: e-mail montado para', emailDest, '| Status:', status);\n\nreturn [{\n  json: {\n    ...d,\n    corpo_email: corpo,\n    assunto_email: subjectLine,\n    request_body: {\n      message: {\n        subject: subjectLine,\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: emailDest } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }],\n        internetMessageHeaders: [\n          { name: 'In-Reply-To', value: threadId },\n          { name: 'References',  value: threadId }\n        ]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -218,7 +218,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ID Caso": "={{ $('Montar Corpo do E-mail').item.json['ID Caso'] }}",
-            "Ultimo Status Enviado": "={{ $('Montar Corpo do E-mail').item.json['Status'] }}"
+            "Último Status Enviado": "={{ $('Montar Corpo do E-mail').item.json['Status'] }}"
           },
           "matchingColumns": [
             "ID Caso"
@@ -234,8 +234,8 @@
               "canBeUsedToMatch": true
             },
             {
-              "id": "Ultimo Status Enviado",
-              "displayName": "Ultimo Status Enviado",
+              "id": "Último Status Enviado",
+              "displayName": "Último Status Enviado",
               "required": false,
               "defaultMatch": false,
               "display": true,
