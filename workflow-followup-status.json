@@ -59,61 +59,12 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": false,
-            "leftValue": "",
-            "typeValidation": "loose"
-          },
-          "conditions": [
-            {
-              "id": "cond-thread-exists",
-              "leftValue": "={{ $json['ID da thread'] || $json['Thread ID'] }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            },
-            {
-              "id": "cond-not-aberto",
-              "leftValue": "={{ $json['Status'] }}",
-              "rightValue": "Aberto",
-              "operator": {
-                "type": "string",
-                "operation": "notEquals"
-              }
-            },
-            {
-              "id": "cond-status-changed",
-              "leftValue": "={{ $json['Status'] }}",
-              "rightValue": "={{ $json['Último Status Enviado'] || $json['Ultimo Status Enviado'] }}",
-              "operator": {
-                "type": "string",
-                "operation": "notEquals"
-              }
-            }
-          ],
-          "combinator": "and"
-        }
-      },
-      "type": "n8n-nodes-base.filter",
-      "typeVersion": 2.2,
-      "position": [
-        840,
-        300
-      ],
-      "id": "b3c4d5e6-f7a8-9012-cdef-012345678902",
-      "name": "Filtrar Status Alterado"
-    },
-    {
-      "parameters": {
-        "jsCode": "// DEBUG: mostra todos os campos recebidos para identificar nomes de colunas\nconsole.log('=== CAMPOS RECEBIDOS ===');\nconsole.log(JSON.stringify(Object.entries($json).map(([k,v]) => k + ': ' + String(v).slice(0,60))));\n\nconst MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst d = $json;\nconst status = (d['Status'] || '').trim();\nconst sNorm  = norm(status);\nconst uNorm  = norm(d['Último Status Enviado'] || d['Ultimo Status Enviado']);\n\nif (sNorm === '' || sNorm === 'aberto' || sNorm === uNorm) {\n  console.log('SKIP pos-normalizacao:', sNorm, '==', uNorm);\n  return [];\n}\n\nconst responsavel = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailDest   = findEmail(responsavel);\n\nif (!emailDest) {\n  console.log('SKIP: responsavel nao encontrado:', responsavel);\n  return [];\n}\n\nconsole.log('OK preparando IA | Status:', status, '| Para:', emailDest);\n\nconst prompt =\n  'Você é um assistente de suporte ao cliente profissional da FAZ Capital.\\n' +\n  'Transforme a nota de status abaixo em um parágrafo de e-mail formal, em português do Brasil.\\n\\n' +\n  'Regras:\\n' +\n  '- Se houver texto entre aspas (\"), reescreva esse conteúdo de forma profissional e elaborada em terceira pessoa\\n' +\n  '- Se for uma solicitação ou pedido (ex: aguardando..., precisa...), reformule de forma cordial e clara\\n' +\n  '- Não invente informações - apenas reformule o que foi fornecido\\n' +\n  '- Seja conciso, direto e profissional\\n' +\n  '- NAO inclua saudacao (Prezado(a)), assinatura nem qualquer outro elemento alem do paragrafo\\n\\n' +\n  'Nota de status: \"' + status + '\"';\n\nreturn [{\n  json: {\n    ...d,\n    email_destinatario: emailDest,\n    openai_body: {\n      model: 'gpt-4o-mini',\n      max_tokens: 400,\n      messages: [{ role: 'user', content: prompt }]\n    }\n  }\n}];"
+        "jsCode": "// ====================================================================\n// CONFIGURACAO: Cole sua chave da OpenAI API aqui\n// Obtenha em: https://platform.openai.com/api-keys\n// ====================================================================\nconst OPENAI_API_KEY = 'COLE_SUA_CHAVE_OPENAI_AQUI';\n// ====================================================================\n\n// DEBUG: mostra todos os campos recebidos para identificar nomes de colunas\nconsole.log('=== CAMPOS RECEBIDOS ===');\nconsole.log(JSON.stringify(Object.entries($json).map(([k,v]) => k + ': ' + String(v).slice(0,80))));\n\nconst MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst d = $json;\n\n// Suporte a variacoes de nome das colunas\nconst threadId  = (d['ID da thread'] || d['Thread ID'] || '').trim();\nconst status    = (d['Status'] || '').trim();\nconst ultStatus = (d['Último Status Enviado'] || d['Ultimo Status Enviado'] || '').trim();\n\nconsole.log('threadId:', threadId, '| status:', status, '| ultStatus:', ultStatus);\n\n// Filtro 1: precisa ter thread ID\nif (!threadId) {\n  console.log('SKIP: sem thread ID');\n  return [];\n}\n\n// Filtro 2: status nao pode ser vazio ou \"Aberto\"\nconst sNorm = norm(status);\nif (sNorm === '' || sNorm === 'aberto') {\n  console.log('SKIP: status vazio ou Aberto:', status);\n  return [];\n}\n\n// Filtro 3: status deve ser diferente do ultimo enviado\nconst uNorm = norm(ultStatus);\nif (sNorm === uNorm) {\n  console.log('SKIP: status nao mudou:', status);\n  return [];\n}\n\n// Busca email do responsavel\nconst responsavel = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailDest   = findEmail(responsavel);\n\nif (!emailDest) {\n  console.log('SKIP: responsavel nao encontrado:', responsavel);\n  return [];\n}\n\nconsole.log('OK preparando IA | Status:', status, '| Para:', emailDest);\n\nconst prompt =\n  'Você é um assistente de suporte ao cliente profissional da FAZ Capital.\\n' +\n  'Transforme a nota de status abaixo em um parágrafo de e-mail formal, em português do Brasil.\\n\\n' +\n  'Regras:\\n' +\n  '- Se houver texto entre aspas (\"), reescreva esse conteúdo de forma profissional e elaborada em terceira pessoa\\n' +\n  '- Se for uma solicitação ou pedido (ex: aguardando..., precisa...), reformule de forma cordial e clara\\n' +\n  '- Não invente informações - apenas reformule o que foi fornecido\\n' +\n  '- Seja conciso, direto e profissional\\n' +\n  '- NAO inclua saudacao (Prezado(a)), assinatura nem qualquer outro elemento alem do paragrafo\\n\\n' +\n  'Nota de status: \"' + status + '\"';\n\nreturn [{\n  json: {\n    ...d,\n    thread_id_ref: threadId,\n    email_destinatario: emailDest,\n    openai_api_key: OPENAI_API_KEY,\n    openai_body: {\n      model: 'gpt-4o-mini',\n      max_tokens: 400,\n      messages: [{ role: 'user', content: prompt }]\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1060,
+        840,
         300
       ],
       "id": "prep-prompt-ia-0001-0002-0003-0004",
@@ -123,11 +74,18 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.openai.com/v1/chat/completions",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "openAiApi",
-        "sendHeaders": false,
+        "sendHeaders": true,
         "headerParameters": {
-          "parameters": []
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.openai_api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
         },
         "sendBody": true,
         "specifyBody": "json",
@@ -137,26 +95,20 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1280,
+        1060,
         300
       ],
       "id": "gerar-texto-ia-0001-0002-0003-0004",
-      "name": "GERAR_TEXTO_IA",
-      "credentials": {
-        "openAiApi": {
-          "id": "SEU_OPENAI_CREDENTIAL_ID",
-          "name": "OpenAI API"
-        }
-      }
+      "name": "GERAR_TEXTO_IA"
     },
     {
       "parameters": {
-        "jsCode": "const textoAI = (\n  $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content\n) || '';\n\nif (!textoAI) {\n  console.log('AVISO: IA nao retornou texto. Resposta:', JSON.stringify($json));\n  return [];\n}\n\nconst d         = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso    = d['ID Caso']            || '';\nconst cliente   = d['Código Cliente']     || d['Codigo_Cliente'] || '';\nconst assunto   = d['Assunto']             || '';\nconst proto     = d['Protocolo N1']        || '';\nconst status    = (d['Status'] || '').trim();\nconst threadId  = (d['ID da thread'] || d['Thread ID'])           || '';\nconst emailDest = d['email_destinatario']  || '';\n\nif (!emailDest || !threadId) {\n  console.log('SKIP: emailDest ou threadId ausente');\n  return [];\n}\n\nconst subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  textoAI + '\\n\\n' +\n  'Status: ' + status + '\\n\\n' +\n  '📌 Protocolo: ' + proto + '\\n' +\n  '👤 Cliente: ' + cliente + '\\n\\n' +\n  '📝 Assunto Caso: ' + assunto + '\\n\\n' +\n  '\\n\\nAtenciosamente,\\n\\n';\n\nconsole.log('OK: e-mail montado para', emailDest, '| Status:', status);\n\nreturn [{\n  json: {\n    ...d,\n    corpo_email: corpo,\n    assunto_email: subjectLine,\n    request_body: {\n      message: {\n        subject: subjectLine,\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: emailDest } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }],\n        internetMessageHeaders: [\n          { name: 'In-Reply-To', value: threadId },\n          { name: 'References',  value: threadId }\n        ]\n      }\n    }\n  }\n}];"
+        "jsCode": "const textoAI = (\n  $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content\n) || '';\n\nif (!textoAI) {\n  console.log('AVISO: IA nao retornou texto. Resposta:', JSON.stringify($json));\n  return [];\n}\n\nconst d         = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso    = d['ID Caso']            || '';\nconst cliente   = d['Código Cliente']     || d['Codigo_Cliente'] || '';\nconst assunto   = d['Assunto']             || '';\nconst proto     = d['Protocolo N1']        || '';\nconst status    = (d['Status'] || '').trim();\nconst threadId  = d['thread_id_ref']      || '';\nconst emailDest = d['email_destinatario'] || '';\n\nif (!emailDest || !threadId) {\n  console.log('SKIP: emailDest ou threadId ausente');\n  return [];\n}\n\nconst subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  textoAI + '\\n\\n' +\n  'Status: ' + status + '\\n\\n' +\n  '📌 Protocolo: ' + proto + '\\n' +\n  '👤 Cliente: ' + cliente + '\\n\\n' +\n  '📝 Assunto Caso: ' + assunto + '\\n\\n' +\n  '\\n\\nAtenciosamente,\\n\\n';\n\nconsole.log('OK: e-mail montado para', emailDest, '| Status:', status);\n\nreturn [{\n  json: {\n    ...d,\n    corpo_email: corpo,\n    assunto_email: subjectLine,\n    request_body: {\n      message: {\n        subject: subjectLine,\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: emailDest } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }],\n        internetMessageHeaders: [\n          { name: 'In-Reply-To', value: threadId },\n          { name: 'References',  value: threadId }\n        ]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1500,
+        1280,
         300
       ],
       "id": "c4d5e6f7-a8b9-0123-defa-123456789013",
@@ -176,7 +128,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1720,
+        1500,
         300
       ],
       "id": "d5e6f7a8-b9c0-1234-efab-234567890124",
@@ -242,7 +194,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        1940,
+        1720,
         300
       ],
       "id": "e6f7a8b9-c0d1-2345-fabc-345678901235",
@@ -279,17 +231,6 @@
       ]
     },
     "Transformar Dados da Planilha": {
-      "main": [
-        [
-          {
-            "node": "Filtrar Status Alterado",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Filtrar Status Alterado": {
       "main": [
         [
           {
