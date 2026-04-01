@@ -3,11 +3,21 @@
   "nodes": [
     {
       "parameters": {
-        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 2 }] }
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
       },
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 300],
+      "position": [
+        200,
+        300
+      ],
       "id": "f1a2b3c4-d5e6-7890-abcd-ef1234567890",
       "name": "A cada 2 minutos"
     },
@@ -21,11 +31,17 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [420, 300],
+      "position": [
+        420,
+        300
+      ],
       "id": "a2b3c4d5-e6f7-8901-bcde-f12345678901",
       "name": "Buscar Chamados na Planilha",
       "credentials": {
-        "googleSheetsOAuth2Api": { "id": "iCtWo6EifTat6VhP", "name": "CASOS_CRITICOS" }
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
       }
     },
     {
@@ -34,38 +50,57 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [620, 300],
+      "position": [
+        620,
+        300
+      ],
       "id": "z9y8x7w6-v5u4-3210-tsr0-qponmlkjih01",
       "name": "Transformar Dados da Planilha"
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "id": "cond-thread-exists",
               "leftValue": "={{ $json['Thread ID'] }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "notEmpty" }
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
             },
             {
               "id": "cond-status-not-empty",
               "leftValue": "={{ $json['Status'] }}",
               "rightValue": "",
-              "operator": { "type": "string", "operation": "notEmpty" }
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
             },
             {
               "id": "cond-not-aberto",
               "leftValue": "={{ $json['Status'] }}",
               "rightValue": "Aberto",
-              "operator": { "type": "string", "operation": "notEquals" }
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
             },
             {
               "id": "cond-status-changed",
               "leftValue": "={{ $json['Status'] }}",
               "rightValue": "={{ $json['Ultimo Status Enviado'] }}",
-              "operator": { "type": "string", "operation": "notEquals" }
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
             }
           ],
           "combinator": "and"
@@ -73,56 +108,66 @@
       },
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.2,
-      "position": [840, 300],
+      "position": [
+        840,
+        300
+      ],
       "id": "b3c4d5e6-f7a8-9012-cdef-012345678902",
       "name": "Filtrar Status Alterado"
     },
     {
       "parameters": {
-        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst d = $json;\nconst status = (d['Status'] || '').trim();\nconst sNorm  = norm(status);\nconst uNorm  = norm(d['Ultimo Status Enviado']);\n\nif (sNorm === '' || sNorm === 'aberto' || sNorm === uNorm) {\n  console.log('SKIP pos-normalizacao:', sNorm, '==', uNorm);\n  return [];\n}\n\nconst responsavel = (d['Respons\u00e1vel'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailDest   = findEmail(responsavel);\n\nif (!emailDest) {\n  console.log('SKIP: responsavel nao encontrado:', responsavel);\n  return [];\n}\n\nconsole.log('OK preparando IA | Status:', status, '| Para:', emailDest);\n\nconst prompt =\n  'Voc\u00ea \u00e9 um assistente de suporte ao cliente profissional da FAZ Capital.\\n' +\n  'Transforme a nota de status abaixo em um par\u00e1grafo de e-mail formal, em portugu\u00eas do Brasil.\\n\\n' +\n  'Regras:\\n' +\n  '- Se houver texto entre aspas (\"), reescreva esse conte\u00fado de forma profissional e elaborada em terceira pessoa\\n' +\n  '- Se for uma solicita\u00e7\u00e3o ou pedido (ex: aguardando..., precisa...), reformule de forma cordial e clara\\n' +\n  '- N\u00e3o invente informa\u00e7\u00f5es - apenas reformule o que foi fornecido\\n' +\n  '- Seja conciso, direto e profissional\\n' +\n  '- NAO inclua saudacao (Prezado(a)), assinatura nem qualquer outro elemento alem do paragrafo\\n\\n' +\n  'Nota de status: \"' + status + '\"';\n\nreturn [{\n  json: {\n    ...d,\n    email_destinatario: emailDest,\n    anthropic_body: {\n      model: 'claude-haiku-4-5-20251001',\n      max_tokens: 400,\n      messages: [{ role: 'user', content: prompt }]\n    }\n  }\n}];"
+        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst d = $json;\nconst status = (d['Status'] || '').trim();\nconst sNorm  = norm(status);\nconst uNorm  = norm(d['Ultimo Status Enviado']);\n\nif (sNorm === '' || sNorm === 'aberto' || sNorm === uNorm) {\n  console.log('SKIP pos-normalizacao:', sNorm, '==', uNorm);\n  return [];\n}\n\nconst responsavel = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailDest   = findEmail(responsavel);\n\nif (!emailDest) {\n  console.log('SKIP: responsavel nao encontrado:', responsavel);\n  return [];\n}\n\nconsole.log('OK preparando IA | Status:', status, '| Para:', emailDest);\n\nconst prompt =\n  'Você é um assistente de suporte ao cliente profissional da FAZ Capital.\\n' +\n  'Transforme a nota de status abaixo em um parágrafo de e-mail formal, em português do Brasil.\\n\\n' +\n  'Regras:\\n' +\n  '- Se houver texto entre aspas (\"), reescreva esse conteúdo de forma profissional e elaborada em terceira pessoa\\n' +\n  '- Se for uma solicitação ou pedido (ex: aguardando..., precisa...), reformule de forma cordial e clara\\n' +\n  '- Não invente informações - apenas reformule o que foi fornecido\\n' +\n  '- Seja conciso, direto e profissional\\n' +\n  '- NAO inclua saudacao (Prezado(a)), assinatura nem qualquer outro elemento alem do paragrafo\\n\\n' +\n  'Nota de status: \"' + status + '\"';\n\nreturn [{\n  json: {\n    ...d,\n    email_destinatario: emailDest,\n    openai_body: {\n      model: 'gpt-4o-mini',\n      max_tokens: 400,\n      messages: [{ role: 'user', content: prompt }]\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1060, 300],
+      "position": [
+        1060,
+        300
+      ],
       "id": "prep-prompt-ia-0001-0002-0003-0004",
       "name": "PREPARAR_PROMPT_IA"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://api.openai.com/v1/chat/completions",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "anthropicApi",
-        "sendHeaders": true,
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": false,
         "headerParameters": {
-          "parameters": [
-            { "name": "anthropic-version", "value": "2023-06-01" }
-          ]
+          "parameters": []
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.anthropic_body) }}",
+        "jsonBody": "={{ JSON.stringify($json.openai_body) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1280, 300],
+      "position": [
+        1280,
+        300
+      ],
       "id": "gerar-texto-ia-0001-0002-0003-0004",
       "name": "GERAR_TEXTO_IA",
       "credentials": {
-        "anthropicApi": {
-          "id": "SEU_ANTHROPIC_CREDENTIAL_ID",
-          "name": "Anthropic API"
+        "openAiApi": {
+          "id": "SEU_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const textoAI = (\n  $json.content && $json.content[0] && $json.content[0].text\n) || '';\n\nif (!textoAI) {\n  console.log('AVISO: IA nao retornou texto. Resposta:', JSON.stringify($json));\n  return [];\n}\n\nconst d         = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso    = d['ID Caso']            || '';\nconst cliente   = d['C\u00f3digo Cliente']     || d['Codigo_Cliente'] || '';\nconst assunto   = d['Assunto']             || '';\nconst proto     = d['Protocolo N1']        || '';\nconst status    = (d['Status'] || '').trim();\nconst threadId  = d['Thread ID']           || '';\nconst emailDest = d['email_destinatario']  || '';\n\nif (!emailDest || !threadId) {\n  console.log('SKIP: emailDest ou threadId ausente');\n  return [];\n}\n\nconst subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  textoAI + '\\n\\n' +\n  'Status: ' + status + '\\n\\n' +\n  '\uD83D\uDCCC Protocolo: ' + proto + '\\n' +\n  '\uD83D\uDC64 Cliente: ' + cliente + '\\n\\n' +\n  '\uD83D\uDCDD Assunto Caso: ' + assunto + '\\n\\n' +\n  '\\n\\nAtenciosamente,\\n\\n';\n\nconsole.log('OK: e-mail montado para', emailDest, '| Status:', status);\n\nreturn [{\n  json: {\n    ...d,\n    corpo_email: corpo,\n    assunto_email: subjectLine,\n    request_body: {\n      message: {\n        subject: subjectLine,\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: emailDest } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }],\n        internetMessageHeaders: [\n          { name: 'In-Reply-To', value: threadId },\n          { name: 'References',  value: threadId }\n        ]\n      }\n    }\n  }\n}];"
+        "jsCode": "const textoAI = (\n  $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content\n) || '';\n\nif (!textoAI) {\n  console.log('AVISO: IA nao retornou texto. Resposta:', JSON.stringify($json));\n  return [];\n}\n\nconst d         = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso    = d['ID Caso']            || '';\nconst cliente   = d['Código Cliente']     || d['Codigo_Cliente'] || '';\nconst assunto   = d['Assunto']             || '';\nconst proto     = d['Protocolo N1']        || '';\nconst status    = (d['Status'] || '').trim();\nconst threadId  = d['Thread ID']           || '';\nconst emailDest = d['email_destinatario']  || '';\n\nif (!emailDest || !threadId) {\n  console.log('SKIP: emailDest ou threadId ausente');\n  return [];\n}\n\nconst subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  textoAI + '\\n\\n' +\n  'Status: ' + status + '\\n\\n' +\n  '📌 Protocolo: ' + proto + '\\n' +\n  '👤 Cliente: ' + cliente + '\\n\\n' +\n  '📝 Assunto Caso: ' + assunto + '\\n\\n' +\n  '\\n\\nAtenciosamente,\\n\\n';\n\nconsole.log('OK: e-mail montado para', emailDest, '| Status:', status);\n\nreturn [{\n  json: {\n    ...d,\n    corpo_email: corpo,\n    assunto_email: subjectLine,\n    request_body: {\n      message: {\n        subject: subjectLine,\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: emailDest } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }],\n        internetMessageHeaders: [\n          { name: 'In-Reply-To', value: threadId },\n          { name: 'References',  value: threadId }\n        ]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1500, 300],
+      "position": [
+        1500,
+        300
+      ],
       "id": "c4d5e6f7-a8b9-0123-defa-123456789013",
       "name": "Montar Corpo do E-mail"
     },
@@ -139,11 +184,17 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1720, 300],
+      "position": [
+        1720,
+        300
+      ],
       "id": "d5e6f7a8-b9c0-1234-efab-234567890124",
       "name": "Enviar Follow-up na Thread",
       "credentials": {
-        "microsoftOutlookOAuth2Api": { "id": "N5oYhQr6IkmOBT8r", "name": "E-mail LucasOperacional" }
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
       }
     },
     {
@@ -160,19 +211,37 @@
           "__rl": true,
           "value": "gid=0",
           "mode": "list",
-          "cachedResultName": "P\u00e1gina1",
+          "cachedResultName": "Página1",
           "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
         },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "ID Caso":               "={{ $('Montar Corpo do E-mail').item.json['ID Caso'] }}",
+            "ID Caso": "={{ $('Montar Corpo do E-mail').item.json['ID Caso'] }}",
             "Ultimo Status Enviado": "={{ $('Montar Corpo do E-mail').item.json['Status'] }}"
           },
-          "matchingColumns": ["ID Caso"],
+          "matchingColumns": [
+            "ID Caso"
+          ],
           "schema": [
-            { "id": "ID Caso",               "displayName": "ID Caso",               "required": true,  "defaultMatch": true,  "display": true, "type": "string", "canBeUsedToMatch": true },
-            { "id": "Ultimo Status Enviado", "displayName": "Ultimo Status Enviado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+            {
+              "id": "ID Caso",
+              "displayName": "ID Caso",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Ultimo Status Enviado",
+              "displayName": "Ultimo Status Enviado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
           ],
           "attemptToConvertTypes": false,
           "convertFieldsToString": false
@@ -181,23 +250,109 @@
       },
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
-      "position": [1940, 300],
+      "position": [
+        1940,
+        300
+      ],
       "id": "e6f7a8b9-c0d1-2345-fabc-345678901235",
       "name": "Atualizar Status Enviado",
       "credentials": {
-        "googleSheetsOAuth2Api": { "id": "iCtWo6EifTat6VhP", "name": "CASOS_CRITICOS" }
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
       }
     }
   ],
   "connections": {
-    "A cada 2 minutos":              { "main": [[{ "node": "Buscar Chamados na Planilha",   "type": "main", "index": 0 }]] },
-    "Buscar Chamados na Planilha":   { "main": [[{ "node": "Transformar Dados da Planilha", "type": "main", "index": 0 }]] },
-    "Transformar Dados da Planilha": { "main": [[{ "node": "Filtrar Status Alterado",        "type": "main", "index": 0 }]] },
-    "Filtrar Status Alterado":       { "main": [[{ "node": "PREPARAR_PROMPT_IA",             "type": "main", "index": 0 }]] },
-    "PREPARAR_PROMPT_IA":            { "main": [[{ "node": "GERAR_TEXTO_IA",                 "type": "main", "index": 0 }]] },
-    "GERAR_TEXTO_IA":                { "main": [[{ "node": "Montar Corpo do E-mail",         "type": "main", "index": 0 }]] },
-    "Montar Corpo do E-mail":        { "main": [[{ "node": "Enviar Follow-up na Thread",     "type": "main", "index": 0 }]] },
-    "Enviar Follow-up na Thread":    { "main": [[{ "node": "Atualizar Status Enviado",       "type": "main", "index": 0 }]] }
+    "A cada 2 minutos": {
+      "main": [
+        [
+          {
+            "node": "Buscar Chamados na Planilha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Chamados na Planilha": {
+      "main": [
+        [
+          {
+            "node": "Transformar Dados da Planilha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transformar Dados da Planilha": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Status Alterado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Status Alterado": {
+      "main": [
+        [
+          {
+            "node": "PREPARAR_PROMPT_IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PREPARAR_PROMPT_IA": {
+      "main": [
+        [
+          {
+            "node": "GERAR_TEXTO_IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GERAR_TEXTO_IA": {
+      "main": [
+        [
+          {
+            "node": "Montar Corpo do E-mail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Corpo do E-mail": {
+      "main": [
+        [
+          {
+            "node": "Enviar Follow-up na Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Follow-up na Thread": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Status Enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
@@ -206,6 +361,8 @@
   },
   "pinData": {},
   "active": false,
-  "meta": { "templateCredsSetupCompleted": true },
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
   "tags": []
 }
