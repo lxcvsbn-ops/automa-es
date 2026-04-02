@@ -107,11 +107,19 @@
           "parameters": [
             {
               "name": "$filter",
-              "value": "={{ `internetMessageId eq '${$json.thread_id_ref}'` }}"
+              "value": "={{ `conversationId eq '${$json.thread_id_ref}'` }}"
             },
             {
               "name": "$select",
-              "value": "id"
+              "value": "id,receivedDateTime"
+            },
+            {
+              "name": "$orderby",
+              "value": "receivedDateTime desc"
+            },
+            {
+              "name": "$top",
+              "value": "1"
             }
           ]
         },
