@@ -14,10 +14,7 @@
       },
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        200,
-        300
-      ],
+      "position": [200, 300],
       "id": "f1a2b3c4-d5e6-7890-abcd-ef1234567890",
       "name": "A cada 2 minutos"
     },
@@ -31,10 +28,7 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        420,
-        300
-      ],
+      "position": [420, 300],
       "id": "a2b3c4d5-e6f7-8901-bcde-f12345678901",
       "name": "Buscar Chamados na Planilha",
       "credentials": {
@@ -50,23 +44,17 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        620,
-        300
-      ],
+      "position": [620, 300],
       "id": "z9y8x7w6-v5u4-3210-tsr0-qponmlkjih01",
       "name": "Transformar Dados da Planilha"
     },
     {
       "parameters": {
-        "jsCode": "// MODO DIAGNOSTICO: retorna TODOS os itens com campo 'diagnostico'\n// para ver na aba Table o que esta acontecendo com cada linha.\n// Apos confirmar que os dados estao corretos, troque DIAGNOSTICO para false.\nconst DIAGNOSTICO = false;\n\nconst MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst d = $json;\n\n// Mostra TODOS os nomes de colunas encontrados para diagnostico\nconst todasColunas = Object.keys(d).join(' | ');\n\n// Suporte a variacoes de nome das colunas\nconst threadId  = (d['ID da thread'] || d['Thread ID'] || '').trim();\nconst status    = (d['Status'] || '').trim();\nconst ultStatus = (d['Último Status Enviado'] || d['Ultimo Status Enviado'] || '').trim();\nconst sNorm     = norm(status);\nconst uNorm     = norm(ultStatus);\n\nconst responsavel = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailDest   = findEmail(responsavel);\n\n// Determina motivo do skip\nlet skipMotivo = 'OK - passaria';\nif (!threadId)                         skipMotivo = 'SKIP: sem thread ID';\nelse if (sNorm === '' || sNorm === 'aberto') skipMotivo = 'SKIP: status vazio ou Aberto [' + status + ']';\nelse if (sNorm === uNorm)              skipMotivo = 'SKIP: status nao mudou [' + status + ']';\nelse if (!emailDest)                   skipMotivo = 'SKIP: responsavel nao encontrado [' + responsavel + ']';\n\nif (DIAGNOSTICO) {\n  // Em modo diagnostico: retorna tudo sem filtrar para inspecao\n  return [{\n    json: {\n      diagnostico: skipMotivo,\n      colunas_encontradas: todasColunas,\n      _threadId: threadId,\n      _status: status,\n      _ultStatus: ultStatus,\n      _responsavel: responsavel,\n      _emailDest: emailDest,\n      ...d\n    }\n  }];\n}\n\n// Modo normal: filtra e processa\nif (skipMotivo !== 'OK - passaria') {\n  return [];\n}\n\nconst prompt =\n  'Você é um assistente de suporte ao cliente profissional da FAZ Capital.\\n' +\n  'Transforme a nota de status abaixo em um parágrafo de e-mail formal, em português do Brasil.\\n\\n' +\n  'Regras:\\n' +\n  '- Se houver texto entre aspas (\"), reescreva esse conteúdo de forma profissional e elaborada em terceira pessoa\\n' +\n  '- Se for uma solicitação ou pedido (ex: aguardando..., precisa...), reformule de forma cordial e clara\\n' +\n  '- Não invente informações - apenas reformule o que foi fornecido\\n' +\n  '- Seja conciso, direto e profissional\\n' +\n  '- NAO inclua saudacao (Prezado(a)), assinatura nem qualquer outro elemento alem do paragrafo\\n\\n' +\n  'Nota de status: \"' + status + '\"';\n\nreturn [{\n  json: {\n    ...d,\n    thread_id_ref: threadId,\n    email_destinatario: emailDest,\n    openai_body: {\n      model: 'gpt-4o-mini',\n      max_tokens: 400,\n      messages: [{ role: 'user', content: prompt }]\n    }\n  }\n}];"
+        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nfunction norm(s) {\n  return (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim();\n}\n\nconst d = $json;\nconst threadId  = (d['ID da thread'] || d['Thread ID'] || '').trim();\nconst status    = (d['Status'] || '').trim();\nconst ultStatus = (d['Último Status Enviado'] || d['Ultimo Status Enviado'] || '').trim();\nconst sNorm     = norm(status);\nconst uNorm     = norm(ultStatus);\n\nif (!threadId) { return []; }\nif (sNorm === '' || sNorm === 'aberto') { return []; }\nif (sNorm === uNorm) { return []; }\n\nconst responsavel = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailDest   = findEmail(responsavel);\nif (!emailDest) { return []; }\n\nconst prompt =\n  'Você é um assistente de suporte ao cliente profissional da FAZ Capital.\\n' +\n  'Transforme a nota de status abaixo em um parágrafo de e-mail formal, em português do Brasil.\\n\\n' +\n  'Regras:\\n' +\n  '- Se houver texto entre aspas (\"), reescreva esse conteúdo de forma profissional e elaborada em terceira pessoa\\n' +\n  '- Se for uma solicitação ou pedido (ex: aguardando..., precisa...), reformule de forma cordial e clara\\n' +\n  '- Não invente informações - apenas reformule o que foi fornecido\\n' +\n  '- Seja conciso, direto e profissional\\n' +\n  '- NAO inclua saudacao (Prezado(a)), assinatura nem qualquer outro elemento alem do paragrafo\\n\\n' +\n  'Nota de status: \"' + status + '\"';\n\nreturn [{\n  json: {\n    ...d,\n    thread_id_ref: threadId,\n    email_destinatario: emailDest,\n    openai_body: {\n      model: 'gpt-4o-mini',\n      max_tokens: 400,\n      messages: [{ role: 'user', content: prompt }]\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        840,
-        300
-      ],
+      "position": [840, 300],
       "id": "prep-prompt-ia-0001-0002-0003-0004",
       "name": "PREPARAR_PROMPT_IA"
     },
@@ -94,45 +82,79 @@
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1060,
-        300
-      ],
+      "position": [1060, 300],
       "id": "gerar-texto-ia-0001-0002-0003-0004",
       "name": "GERAR_TEXTO_IA"
     },
     {
       "parameters": {
-        "jsCode": "const textoAI = (\n  $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content\n) || '';\n\nif (!textoAI) {\n  console.log('AVISO: IA nao retornou texto. Resposta:', JSON.stringify($json));\n  return [];\n}\n\nconst d         = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso    = d['ID Caso']            || '';\nconst cliente   = d['Código Cliente']     || d['Codigo_Cliente'] || '';\nconst assunto   = d['Assunto']             || '';\nconst proto     = d['Protocolo N1']        || '';\nconst status    = (d['Status'] || '').trim();\nconst threadId  = d['thread_id_ref']      || '';\nconst emailDest = d['email_destinatario'] || '';\n\nif (!emailDest || !threadId) {\n  console.log('SKIP: emailDest ou threadId ausente');\n  return [];\n}\n\nconst subjectLine = 'Re: [SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto;\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  textoAI + '\\n\\n' +\n  'Status: ' + status + '\\n\\n' +\n  '📌 Protocolo: ' + proto + '\\n' +\n  '👤 Cliente: ' + cliente + '\\n\\n' +\n  '📝 Assunto Caso: ' + assunto + '\\n\\n' +\n  '\\n\\nAtenciosamente,\\n\\n';\n\nconsole.log('OK: e-mail montado para', emailDest, '| Status:', status);\n\nreturn [{\n  json: {\n    ...d,\n    corpo_email: corpo,\n    assunto_email: subjectLine,\n    request_body: {\n      message: {\n        subject: subjectLine,\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: emailDest } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }],\n        internetMessageHeaders: [\n          { name: 'In-Reply-To', value: threadId },\n          { name: 'References',  value: threadId }\n        ]\n      }\n    }\n  }\n}];"
+        "jsCode": "const textoAI = (\n  $json.choices && $json.choices[0] && $json.choices[0].message && $json.choices[0].message.content\n) || '';\n\nif (!textoAI) {\n  console.log('AVISO: IA nao retornou texto:', JSON.stringify($json));\n  return [];\n}\n\nconst d         = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso    = d['ID Caso']        || '';\nconst cliente   = d['Código Cliente'] || d['Codigo_Cliente'] || '';\nconst assunto   = d['Assunto']         || '';\nconst proto     = d['Protocolo N1']    || '';\nconst status    = (d['Status'] || '').trim();\nconst threadId  = d['thread_id_ref']  || '';\nconst emailDest = d['email_destinatario'] || '';\n\nif (!emailDest || !threadId) {\n  console.log('SKIP: emailDest ou threadId ausente');\n  return [];\n}\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  textoAI + '\\n\\n' +\n  'Status: ' + status + '\\n\\n' +\n  'Protocolo: ' + proto + '\\n' +\n  'Cliente: ' + cliente + '\\n' +\n  'Assunto: ' + assunto + '\\n\\n' +\n  'Atenciosamente,\\n\\n';\n\nconsole.log('OK: e-mail montado para', emailDest, '| Status:', status);\n\nreturn [{\n  json: {\n    ...d,\n    corpo_email: corpo,\n    id_caso: idCaso,\n    status_atual: status,\n    email_destinatario: emailDest\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1280,
-        300
-      ],
+      "position": [1280, 300],
       "id": "c4d5e6f7-a8b9-0123-defa-123456789013",
       "name": "Montar Corpo do E-mail"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://graph.microsoft.com/v1.0/me/sendMail",
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/me/messages",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftOutlookOAuth2Api",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "sendQueryParameters": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "$filter",
+              "value": "={{ `internetMessageId eq '${$json.thread_id_ref}'` }}"
+            },
+            {
+              "name": "$select",
+              "value": "id"
+            }
+          ]
+        },
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1500,
-        300
-      ],
-      "id": "d5e6f7a8-b9c0-1234-efab-234567890124",
-      "name": "Enviar Follow-up na Thread",
+      "position": [1500, 300],
+      "id": "buscar-email-orig-0001-0002-0003-04",
+      "name": "Buscar Email Original",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgs = $json.value;\nif (!msgs || msgs.length === 0) {\n  console.log('AVISO: Email original nao encontrado para thread:', $('Montar Corpo do E-mail').item.json.thread_id_ref);\n  return [];\n}\n\nconst originalId = msgs[0].id;\nconst d          = $('Montar Corpo do E-mail').item.json;\n\nconsole.log('Email original encontrado:', originalId);\n\nreturn [{\n  json: {\n    original_message_id: originalId,\n    id_caso:    d.id_caso    || d['ID Caso'] || '',\n    status_atual: d.status_atual || '',\n    reply_body: {\n      message: {\n        body: { contentType: 'Text', content: d.corpo_email },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1720, 300],
+      "id": "prep-envio-resp-0001-0002-0003-04",
+      "name": "Preparar Envio Resposta"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/me/messages/' + $json.original_message_id + '/reply' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.reply_body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1940, 300],
+      "id": "enviar-resp-thread-0001-0002-0003-04",
+      "name": "Enviar Resposta na Thread",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "N5oYhQr6IkmOBT8r",
@@ -160,12 +182,10 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "ID Caso": "={{ $('Montar Corpo do E-mail').item.json['ID Caso'] }}",
-            "Último Status Enviado": "={{ $('Montar Corpo do E-mail').item.json['Status'] }}"
+            "ID Caso": "={{ $('Preparar Envio Resposta').item.json.id_caso }}",
+            "Último Status Enviado": "={{ $('Preparar Envio Resposta').item.json.status_atual }}"
           },
-          "matchingColumns": [
-            "ID Caso"
-          ],
+          "matchingColumns": ["ID Caso"],
           "schema": [
             {
               "id": "ID Caso",
@@ -193,10 +213,7 @@
       },
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
-      "position": [
-        1720,
-        300
-      ],
+      "position": [2160, 300],
       "id": "e6f7a8b9-c0d1-2345-fabc-345678901235",
       "name": "Atualizar Status Enviado",
       "credentials": {
@@ -209,81 +226,31 @@
   ],
   "connections": {
     "A cada 2 minutos": {
-      "main": [
-        [
-          {
-            "node": "Buscar Chamados na Planilha",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Buscar Chamados na Planilha", "type": "main", "index": 0 }]]
     },
     "Buscar Chamados na Planilha": {
-      "main": [
-        [
-          {
-            "node": "Transformar Dados da Planilha",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Transformar Dados da Planilha", "type": "main", "index": 0 }]]
     },
     "Transformar Dados da Planilha": {
-      "main": [
-        [
-          {
-            "node": "PREPARAR_PROMPT_IA",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "PREPARAR_PROMPT_IA", "type": "main", "index": 0 }]]
     },
     "PREPARAR_PROMPT_IA": {
-      "main": [
-        [
-          {
-            "node": "GERAR_TEXTO_IA",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "GERAR_TEXTO_IA", "type": "main", "index": 0 }]]
     },
     "GERAR_TEXTO_IA": {
-      "main": [
-        [
-          {
-            "node": "Montar Corpo do E-mail",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Montar Corpo do E-mail", "type": "main", "index": 0 }]]
     },
     "Montar Corpo do E-mail": {
-      "main": [
-        [
-          {
-            "node": "Enviar Follow-up na Thread",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Buscar Email Original", "type": "main", "index": 0 }]]
     },
-    "Enviar Follow-up na Thread": {
-      "main": [
-        [
-          {
-            "node": "Atualizar Status Enviado",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Buscar Email Original": {
+      "main": [[{ "node": "Preparar Envio Resposta", "type": "main", "index": 0 }]]
+    },
+    "Preparar Envio Resposta": {
+      "main": [[{ "node": "Enviar Resposta na Thread", "type": "main", "index": 0 }]]
+    },
+    "Enviar Resposta na Thread": {
+      "main": [[{ "node": "Atualizar Status Enviado", "type": "main", "index": 0 }]]
     }
   },
   "settings": {
