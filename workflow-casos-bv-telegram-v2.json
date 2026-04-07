@@ -203,46 +203,13 @@
     },
     {
       "parameters": {
-        "jsCode": "function addBusinessDays(dateStr, days) {\n  // Parse DD/MM/YYYY\n  const parts = dateStr.split('/');\n  if (parts.length !== 3) return null;\n  const [d, m, y] = parts.map(Number);\n  const date = new Date(y, m - 1, d);\n  let added = 0;\n  while (added < days) {\n    date.setDate(date.getDate() + 1);\n    const dow = date.getDay();\n    if (dow !== 0 && dow !== 6) added++; // pula sabado e domingo\n  }\n  return date;\n}\n\nconst dataAbertura = $('Code in JavaScript').item.json.Data_Abertura || '';\nconst idCaso       = $('CAPTURAR_THREAD_ID').item.json.id_caso       || '';\nconst cliente      = $('Code in JavaScript').item.json.Codigo_Cliente || '';\nconst assunto      = $('Code in JavaScript').item.json.Assunto        || '';\nconst protoBV      = $('Code in JavaScript').item.json.Protocolo_BV  || '';\n\nconst prazoDate = addBusinessDays(dataAbertura, 2);\nif (!prazoDate) throw new Error('Data de abertura invalida: ' + dataAbertura);\n\nconst pad = n => String(n).padStart(2, '0');\nconst prazoISO = prazoDate.getFullYear() + '-' + pad(prazoDate.getMonth() + 1) + '-' + pad(prazoDate.getDate());\n\nconsole.log('Prazo D+2 util para', idCaso, ':', prazoISO);\n\nreturn [{\n  json: {\n    id_caso:   idCaso,\n    cliente:   cliente,\n    assunto:   assunto,\n    proto_bv:  protoBV,\n    prazo_iso: prazoISO,\n    event_cobranca: {\n      subject: '⏰ Cobrança — ' + idCaso + ' | Cliente ' + cliente,\n      start: { dateTime: prazoISO + 'T09:00:00', timeZone: 'America/Sao_Paulo' },\n      end:   { dateTime: prazoISO + 'T09:30:00', timeZone: 'America/Sao_Paulo' },\n      body: {\n        contentType: 'Text',\n        content: 'Prazo de cobrança (D+2 úteis) para o caso ' + idCaso + '.\\n\\nCliente: ' + cliente + '\\nAssunto: ' + assunto + '\\nProtocolo BV: ' + protoBV + '\\n\\n⚠️ Se o caso não foi resolvido, escale para a área de líderes de atendimento (BDO).'\n      },\n      isReminderOn: true,\n      reminderMinutesBeforeStart: 60\n    }\n  }\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1620, -64],
-      "id": "calc-prazo-0001-0002-0003-0004",
-      "name": "CALCULAR_PRAZO_COBRANCA"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://graph.microsoft.com/v1.0/me/events",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftOutlookOAuth2Api",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.event_cobranca) }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1820, -64],
-      "id": "criar-evento-cobr-0001-0002-0003-04",
-      "name": "CRIAR_EVENTO_COBRANCA",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "N5oYhQr6IkmOBT8r",
-          "name": "E-mail LucasOperacional"
-        }
-      }
-    },
-    {
-      "parameters": {
         "chatId": "={{ $('CASOS_CRITICOS').item.json.message.chat.id }}",
         "text": "=🚨 Caso crítico registrado\n\nID: {{ $('CAPTURAR_THREAD_ID').item.json.id_caso }}\nEquipe acionada.",
         "additionalFields": { "appendAttribution": false }
       },
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [2020, -64],
+      "position": [1620, -64],
       "id": "720f7e54-3461-44e7-b0ae-1e911cbfb0b3",
       "name": "MENSAGEM CHAMADO ABERTO2",
       "webhookId": "057e9a18-1a88-4451-be7f-ce185dfb62c1",
@@ -278,12 +245,6 @@
       "main": [[{ "node": "SALVAR_THREAD_ID",        "type": "main", "index": 0 }]]
     },
     "SALVAR_THREAD_ID": {
-      "main": [[{ "node": "CALCULAR_PRAZO_COBRANCA", "type": "main", "index": 0 }]]
-    },
-    "CALCULAR_PRAZO_COBRANCA": {
-      "main": [[{ "node": "CRIAR_EVENTO_COBRANCA", "type": "main", "index": 0 }]]
-    },
-    "CRIAR_EVENTO_COBRANCA": {
       "main": [[{ "node": "MENSAGEM CHAMADO ABERTO2", "type": "main", "index": 0 }]]
     }
   },
