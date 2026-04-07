@@ -1,0 +1,174 @@
+{
+  "name": "ESCALACAO_BDO",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300],
+      "id": "esc-trigger-0001-0002-0003-0004",
+      "name": "Diariamente 8h (dias uteis)"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/values/P%C3%A1gina1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleSheetsOAuth2Api",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 300],
+      "id": "esc-buscar-0001-0002-0003-0004",
+      "name": "Buscar Casos na Planilha",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const sheetData = $json.values;\nif (!sheetData || sheetData.length < 2) return [];\nconst headers = sheetData[0];\nconst results = [];\nfor (let i = 1; i < sheetData.length; i++) {\n  const row = sheetData[i];\n  if (!row || row.length === 0) continue;\n  const obj = {};\n  headers.forEach((header, idx) => { obj[header] = row[idx] !== undefined ? row[idx] : ''; });\n  results.push({ json: obj });\n}\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [620, 300],
+      "id": "esc-transform-0001-0002-0003-04",
+      "name": "Transformar Dados"
+    },
+    {
+      "parameters": {
+        "jsCode": "function addBusinessDays(dateStr, days) {\n  const parts = (dateStr || '').split('/');\n  if (parts.length !== 3) return null;\n  const [d, m, y] = parts.map(Number);\n  const date = new Date(y, m - 1, d);\n  let added = 0;\n  while (added < days) {\n    date.setDate(date.getDate() + 1);\n    const dow = date.getDay();\n    if (dow !== 0 && dow !== 6) added++;\n  }\n  return date;\n}\n\nconst d = $json;\nconst idCaso      = d['ID Caso']       || '';\nconst dataAb      = d['Data Abertura'] || '';\nconst status      = (d['Status'] || '').toLowerCase();\nconst threadId    = (d['ID da thread'] || d['Thread ID'] || '').trim();\nconst escalado    = (d['Escalado'] || '').trim().toLowerCase();\nconst cliente     = d['Código Cliente'] || d['Codigo_Cliente'] || '';\nconst assunto     = d['Assunto']        || '';\nconst protoBV     = d['Protocolo BV']   || '';\n\n// Ignora casos sem ID, sem thread, ja resolvidos ou ja escalados\nif (!idCaso || !threadId) return [];\nif (status === 'resolvido' || status === 'fechado' || status === 'encerrado') return [];\nif (escalado === 'sim') return [];\n\n// Calcula prazo D+2 uteis\nconst prazo = addBusinessDays(dataAb, 2);\nif (!prazo) {\n  console.log('Data invalida para', idCaso, ':', dataAb);\n  return [];\n}\n\nconst hoje = new Date();\nhoje.setHours(0, 0, 0, 0);\nprazo.setHours(0, 0, 0, 0);\n\n// So escalona se o prazo ja venceu (prazo <= hoje)\nif (prazo > hoje) {\n  console.log('Prazo ainda nao venceu para', idCaso, ':', prazo.toLocaleDateString('pt-BR'));\n  return [];\n}\n\nconsole.log('ESCALONANDO:', idCaso, '| Prazo vencido em:', prazo.toLocaleDateString('pt-BR'));\n\nconst pad = n => String(n).padStart(2, '0');\nconst hoje2 = new Date();\nconst hojeISO = hoje2.getFullYear() + '-' + pad(hoje2.getMonth() + 1) + '-' + pad(hoje2.getDate());\n\nreturn [{\n  json: {\n    id_caso:  idCaso,\n    cliente:  cliente,\n    assunto:  assunto,\n    proto_bv: protoBV,\n    prazo_vencido: prazo.toLocaleDateString('pt-BR'),\n    event_escalacao: {\n      subject: '🚨 Escalar para BDO — ' + idCaso + ' | Cliente ' + cliente,\n      start: { dateTime: hojeISO + 'T09:00:00', timeZone: 'America/Sao_Paulo' },\n      end:   { dateTime: hojeISO + 'T09:30:00', timeZone: 'America/Sao_Paulo' },\n      body: {\n        contentType: 'Text',\n        content: '⚠️ PRAZO VENCIDO — O caso ' + idCaso + ' ultrapassou 2 dias úteis sem resolução.\\n\\nCliente: ' + cliente + '\\nAssunto: ' + assunto + '\\nProtocolo BV: ' + protoBV + '\\nPrazo original: ' + prazo.toLocaleDateString(\\'pt-BR\\') + '\\n\\nAção necessária: escalar para os líderes de atendimento (BDO).'\n      },\n      importance: 'high',\n      isReminderOn: true,\n      reminderMinutesBeforeStart: 0\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300],
+      "id": "esc-filtrar-0001-0002-0003-0004",
+      "name": "Filtrar Casos Vencidos"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.event_escalacao) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 300],
+      "id": "esc-criar-evento-0001-0002-0003-04",
+      "name": "Criar Evento Escalacao BDO",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
+          "mode": "list",
+          "cachedResultName": "CASOS_CRITICOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Página1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID Caso": "={{ $('Filtrar Casos Vencidos').item.json.id_caso }}",
+            "Escalado": "SIM"
+          },
+          "matchingColumns": ["ID Caso"],
+          "schema": [
+            {
+              "id": "ID Caso",
+              "displayName": "ID Caso",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Escalado",
+              "displayName": "Escalado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1280, 300],
+      "id": "esc-marcar-0001-0002-0003-0004",
+      "name": "Marcar Escalado na Planilha",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Diariamente 8h (dias uteis)": {
+      "main": [[{ "node": "Buscar Casos na Planilha", "type": "main", "index": 0 }]]
+    },
+    "Buscar Casos na Planilha": {
+      "main": [[{ "node": "Transformar Dados", "type": "main", "index": 0 }]]
+    },
+    "Transformar Dados": {
+      "main": [[{ "node": "Filtrar Casos Vencidos", "type": "main", "index": 0 }]]
+    },
+    "Filtrar Casos Vencidos": {
+      "main": [[{ "node": "Criar Evento Escalacao BDO", "type": "main", "index": 0 }]]
+    },
+    "Criar Evento Escalacao BDO": {
+      "main": [[{ "node": "Marcar Escalado na Planilha", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
