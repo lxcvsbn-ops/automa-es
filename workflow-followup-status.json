@@ -192,7 +192,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ID Caso": "={{ $('Preparar Envio Resposta').item.json.id_caso }}",
-            "Último Status Enviado": "={{ $('Preparar Envio Resposta').item.json.status_atual }}"
+            "Ultimo Status Enviado": "={{ $('Preparar Envio Resposta').item.json.status_atual }}"
           },
           "matchingColumns": ["ID Caso"],
           "schema": [
@@ -206,8 +206,8 @@
               "canBeUsedToMatch": true
             },
             {
-              "id": "Último Status Enviado",
-              "displayName": "Último Status Enviado",
+              "id": "Ultimo Status Enviado",
+              "displayName": "Ultimo Status Enviado",
               "required": false,
               "defaultMatch": false,
               "display": true,
