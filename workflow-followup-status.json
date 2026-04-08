@@ -234,7 +234,7 @@
     },
     {
       "parameters": {
-        "jsCode": "function addBusinessDays(days) {\n  const date = new Date();\n  let added = 0;\n  while (added < days) {\n    date.setDate(date.getDate() + 1);\n    const dow = date.getDay();\n    if (dow !== 0 && dow !== 6) added++;\n  }\n  return date;\n}\n\nconst d       = $('Preparar Envio Resposta').item.json;\nconst idCaso  = d.id_caso  || '';\nconst cliente = d['Código Cliente'] || d['Codigo_Cliente'] || '';\nconst assunto = d['Assunto'] || '';\nconst protoBV = d['Protocolo BV'] || '';\nconst status  = d.status_atual || '';\n\nconst prazoDate = addBusinessDays(2);\nconst pad = n => String(n).padStart(2, '0');\nconst prazoISO = prazoDate.getFullYear() + '-' + pad(prazoDate.getMonth() + 1) + '-' + pad(prazoDate.getDate());\n\nconsole.log('Evento cobranca D+2 para', idCaso, ':', prazoISO);\n\nreturn [{\n  json: {\n    event_cobranca: {\n      subject: '⏰ Cobrança — ' + idCaso + ' | Cliente ' + cliente,\n      start: { dateTime: prazoISO + 'T09:00:00', timeZone: 'America/Sao_Paulo' },\n      end:   { dateTime: prazoISO + 'T09:30:00', timeZone: 'America/Sao_Paulo' },\n      body: {\n        contentType: 'Text',\n        content: 'Lembrete de cobrança (D+2 úteis) para o caso ' + idCaso + '.\\n\\nÚltimo status enviado: ' + status + '\\n\\nCliente: ' + cliente + '\\nAssunto: ' + assunto + '\\nProtocolo BV: ' + protoBV + '\\n\\n⚠️ Se não houver retorno, escale para BDO.'\n      },\n      isReminderOn: true,\n      reminderMinutesBeforeStart: 60\n    }\n  }\n}];"
+        "jsCode": "function addBusinessDays(days) {\n  const date = new Date();\n  let added = 0;\n  while (added < days) {\n    date.setDate(date.getDate() + 1);\n    const dow = date.getDay();\n    if (dow !== 0 && dow !== 6) added++;\n  }\n  return date;\n}\n\nconst d        = $('Preparar Envio Resposta').item.json;\nconst prep     = $('PREPARAR_PROMPT_IA').item.json;\nconst idCaso   = d.id_caso || '';\nconst cliente  = prep['Código Cliente'] || prep['Codigo_Cliente'] || '';\nconst emailDest = prep['email_destinatario'] || '';\n\nconst prazoDate = addBusinessDays(2);\nconst pad = n => String(n).padStart(2, '0');\nconst prazoISO = prazoDate.getFullYear() + '-' + pad(prazoDate.getMonth() + 1) + '-' + pad(prazoDate.getDate());\n\nconsole.log('Evento cobranca D+2 para', idCaso, ':', prazoISO);\n\nconst attendees = emailDest\n  ? [{ emailAddress: { address: emailDest }, type: 'required' }]\n  : [];\n\nreturn [{\n  json: {\n    event_cobranca: {\n      subject: '⏰ Cobrança — ' + idCaso + ' | Cliente ' + cliente,\n      start: { dateTime: prazoISO + 'T09:00:00', timeZone: 'America/Sao_Paulo' },\n      end:   { dateTime: prazoISO + 'T09:30:00', timeZone: 'America/Sao_Paulo' },\n      body: {\n        contentType: 'Text',\n        content: 'Prazo de cobrança (D+2 úteis).\\n\\n⚠️ Se o caso não foi resolvido, escale para a área de líderes de atendimento (BDO).'\n      },\n      attendees: attendees,\n      isReminderOn: true,\n      reminderMinutesBeforeStart: 60\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -264,6 +264,152 @@
           "name": "E-mail LucasOperacional"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\nconst GENEROS = {\n  'rodrigo': 'M', 'lucas': 'M', 'athos': 'M', 'fabio': 'M',\n  'allini': 'F', 'ana': 'F', 'maria': 'F', 'patricia': 'F'\n};\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    if (chave.toLowerCase().includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  return '';\n}\n\nconst d = $json;\nconst protoBV    = (d['Protocolo BV'] || '').trim();\nconst bvEnviado  = (d['Protocolo BV Enviado'] || '').trim().toUpperCase();\nconst threadId   = (d['ID da thread'] || d['Thread ID'] || '').trim();\n\nif (!protoBV)              { return []; }\nif (bvEnviado === 'SIM')   { return []; }\nif (!threadId)             { return []; }\n\nconst responsavelRaw = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailNoCampo   = (responsavelRaw.match(/([\\w.+-]+@[\\w.-]+\\.[\\w]+)/) || [])[1] || '';\nconst nomeSemEmail   = responsavelRaw.replace(/[\\w.+-]+@[\\w.-]+\\.[\\w]+/g, '').trim();\nconst emailDest      = emailNoCampo || findEmail(nomeSemEmail);\nif (!emailDest) { return []; }\n\nconst primeiroNome = nomeSemEmail.split(' ')[0] || '';\nconst genero   = GENEROS[primeiroNome.toLowerCase()] || 'M';\nconst saudacao = (genero === 'F' ? 'Prezada' : 'Prezado') + (primeiroNome ? ' ' + primeiroNome : '');\n\nconsole.log('BV protocol detectado:', protoBV, '| destinatario:', emailDest);\n\nreturn [{\n  json: {\n    ...d,\n    thread_id_ref:      threadId,\n    email_destinatario: emailDest,\n    saudacao:           saudacao,\n    protocolo_bv:       protoBV\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 520],
+      "id": "verif-proto-bv-0001-0002-0003-04",
+      "name": "VERIFICAR_PROTOCOLO_BV"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/me/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendQueryParameters": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "$filter",
+              "value": "={{ `conversationId eq '${$json.thread_id_ref}'` }}"
+            },
+            {
+              "name": "$select",
+              "value": "id,receivedDateTime"
+            },
+            {
+              "name": "$orderby",
+              "value": "receivedDateTime desc"
+            },
+            {
+              "name": "$top",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 520],
+      "id": "buscar-email-bv-0001-0002-0003-04",
+      "name": "Buscar Email BV",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgs = $json.value;\nif (!msgs || msgs.length === 0) {\n  console.log('AVISO: Email nao encontrado para BV thread');\n  return [];\n}\n\nconst originalId = msgs[0].id;\nconst d = $('VERIFICAR_PROTOCOLO_BV').item.json;\n\nconst saudacao  = d.saudacao  || 'Prezado(a)';\nconst protoBV   = d.protocolo_bv || '';\n\nconst corpo =\n  saudacao + ',\\n\\n' +\n  'Informamos que o protocolo BV do seu caso foi registrado com sucesso. ' +\n  'Nossa equipe segue acompanhando e retornará com atualizações.\\n\\n' +\n  'Protocolo BV: ' + protoBV + '\\n\\n\\n' +\n  'Atenciosamente,';\n\nconsole.log('Preparando e-mail BV para', d.email_destinatario, '| protocolo:', protoBV);\n\nreturn [{\n  json: {\n    original_message_id: originalId,\n    id_caso: d['ID Caso'] || '',\n    reply_body: {\n      message: {\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 520],
+      "id": "prep-resp-bv-0001-0002-0003-04",
+      "name": "Preparar Resposta BV"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/me/messages/' + $json.original_message_id + '/reply' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.reply_body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 520],
+      "id": "enviar-email-bv-0001-0002-0003-04",
+      "name": "Enviar Email BV",
+      "alwaysOutputData": true,
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
+          "mode": "list",
+          "cachedResultName": "CASOS_CRITICOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Página1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID Caso": "={{ $('Preparar Resposta BV').item.json.id_caso }}",
+            "Protocolo BV Enviado": "=SIM"
+          },
+          "matchingColumns": ["ID Caso"],
+          "schema": [
+            {
+              "id": "ID Caso",
+              "displayName": "ID Caso",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Protocolo BV Enviado",
+              "displayName": "Protocolo BV Enviado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1720, 520],
+      "id": "marcar-bv-enviado-0001-0002-0003-04",
+      "name": "Marcar BV Enviado",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
+      }
     }
   ],
   "connections": {
@@ -274,7 +420,10 @@
       "main": [[{ "node": "Transformar Dados da Planilha", "type": "main", "index": 0 }]]
     },
     "Transformar Dados da Planilha": {
-      "main": [[{ "node": "PREPARAR_PROMPT_IA", "type": "main", "index": 0 }]]
+      "main": [[
+        { "node": "PREPARAR_PROMPT_IA",       "type": "main", "index": 0 },
+        { "node": "VERIFICAR_PROTOCOLO_BV",   "type": "main", "index": 0 }
+      ]]
     },
     "PREPARAR_PROMPT_IA": {
       "main": [[{ "node": "GERAR_TEXTO_IA", "type": "main", "index": 0 }]]
@@ -299,6 +448,18 @@
     },
     "Calcular Prazo Cobranca": {
       "main": [[{ "node": "Criar Evento Cobranca", "type": "main", "index": 0 }]]
+    },
+    "VERIFICAR_PROTOCOLO_BV": {
+      "main": [[{ "node": "Buscar Email BV", "type": "main", "index": 0 }]]
+    },
+    "Buscar Email BV": {
+      "main": [[{ "node": "Preparar Resposta BV", "type": "main", "index": 0 }]]
+    },
+    "Preparar Resposta BV": {
+      "main": [[{ "node": "Enviar Email BV", "type": "main", "index": 0 }]]
+    },
+    "Enviar Email BV": {
+      "main": [[{ "node": "Marcar BV Enviado", "type": "main", "index": 0 }]]
     }
   },
   "settings": {
