@@ -128,7 +128,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Captura o conversationId do draft ANTES de enviar.\n// conversationId é estável — não muda após o envio, ao contrário do internetMessageId.\n// Após ENVIAR_EMAIL (202 No Content), $json fica vazio, por isso salvamos aqui.\nconst messageId      = $json.id              || '';\nconst conversationId = $json.conversationId  || '';\nconst idCaso         = $('PREPARAR_EMAIL').item.json.id_caso_ref || '';\n\nif (!messageId) {\n  throw new Error('CRIAR_EMAIL nao retornou o ID da mensagem. Verifique as credenciais do Outlook.');\n}\n\nif (!conversationId) {\n  console.log('AVISO: conversationId nao encontrado na resposta do Graph API.');\n}\n\nconsole.log('Conversation ID capturado:', conversationId);\nconsole.log('ID Caso ref:', idCaso);\n\nreturn [{ json: {\n  message_id:      messageId,\n  thread_id:       conversationId,\n  id_caso:         idCaso\n} }];"
+        "jsCode": "// Captura o internetMessageId do draft ANTES de enviar.\n// internetMessageId é o Message-ID RFC 2822 — estável e único para cada e-mail.\n// Após ENVIAR_EMAIL (202 No Content), $json fica vazio, por isso salvamos aqui.\nconst messageId         = $json.id                || '';\nconst internetMessageId = $json.internetMessageId || '';\nconst idCaso            = $('PREPARAR_EMAIL').item.json.id_caso_ref || '';\n\nif (!messageId) {\n  throw new Error('CRIAR_EMAIL nao retornou o ID da mensagem. Verifique as credenciais do Outlook.');\n}\n\nif (!internetMessageId) {\n  console.log('AVISO: internetMessageId nao encontrado na resposta do Graph API.');\n}\n\nconsole.log('Internet Message ID capturado:', internetMessageId);\nconsole.log('ID Caso ref:', idCaso);\n\nreturn [{ json: {\n  message_id: messageId,\n  thread_id:  internetMessageId,\n  id_caso:    idCaso\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -158,47 +158,6 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://graph.microsoft.com/v1.0/me/mailFolders/SentItems/messages",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftOutlookOAuth2Api",
-        "sendQueryParameters": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "$filter",
-              "value": "={{ `conversationId eq '${$('CAPTURAR_THREAD_ID').item.json.thread_id}'` }}"
-            },
-            {
-              "name": "$select",
-              "value": "id,sentDateTime"
-            },
-            {
-              "name": "$orderby",
-              "value": "sentDateTime desc"
-            },
-            {
-              "name": "$top",
-              "value": "1"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1420, -64],
-      "id": "buscar-sent-email-0001-0002-0003-04",
-      "name": "BUSCAR_EMAIL_ENVIADO",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "N5oYhQr6IkmOBT8r",
-          "name": "E-mail LucasOperacional"
-        }
-      }
-    },
-    {
-      "parameters": {
         "operation": "update",
         "documentId": {
           "__rl": true,
@@ -218,7 +177,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ID Caso":   "={{ $('CAPTURAR_THREAD_ID').item.json.id_caso }}",
-            "Thread ID": "={{ ($json.value && $json.value.length > 0) ? $json.value[0].id : $('CAPTURAR_THREAD_ID').item.json.thread_id }}"
+            "Thread ID": "={{ $('CAPTURAR_THREAD_ID').item.json.thread_id }}"
           },
           "matchingColumns": ["ID Caso"],
           "schema": [
@@ -283,9 +242,6 @@
       "main": [[{ "node": "ENVIAR_EMAIL",            "type": "main", "index": 0 }]]
     },
     "ENVIAR_EMAIL": {
-      "main": [[{ "node": "BUSCAR_EMAIL_ENVIADO",     "type": "main", "index": 0 }]]
-    },
-    "BUSCAR_EMAIL_ENVIADO": {
       "main": [[{ "node": "SALVAR_THREAD_ID",        "type": "main", "index": 0 }]]
     },
     "SALVAR_THREAD_ID": {
