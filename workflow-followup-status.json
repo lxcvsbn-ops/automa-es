@@ -139,7 +139,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const msgs = $json.value;\nif (!msgs || msgs.length === 0) {\n  console.log('AVISO: Email original nao encontrado para thread:', $('Montar Corpo do E-mail').item.json.thread_id_ref);\n  return [];\n}\n\nconst originalId = msgs[0].id;\nconst d          = $('Montar Corpo do E-mail').item.json;\n\nconsole.log('Email original encontrado:', originalId);\n\nreturn [{\n  json: {\n    original_message_id: originalId,\n    id_caso:    d.id_caso    || d['ID Caso'] || '',\n    status_atual: d.status_atual || '',\n    reply_body: {\n      message: {\n        body: { contentType: 'Text', content: d.corpo_email },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
+        "jsCode": "// Thread ID agora armazena o messageId real do e-mail enviado (Sent Items),\n// nao mais o conversationId. Usamos diretamente sem precisar de busca.\nconst d = $('Montar Corpo do E-mail').item.json;\nconst originalId = d.thread_id_ref || '';\n\nif (!originalId) {\n  console.log('AVISO: Thread ID vazio para caso', d.id_caso);\n  return [];\n}\n\nconsole.log('Usando messageId direto:', originalId, '| caso:', d.id_caso);\n\nreturn [{\n  json: {\n    original_message_id: originalId,\n    id_caso:      d.id_caso    || d['ID Caso'] || '',\n    status_atual: d.status_atual || '',\n    reply_body: {\n      message: {\n        body: { contentType: 'Text', content: d.corpo_email },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -379,7 +379,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const msgs = $json.value;\nif (!msgs || msgs.length === 0) {\n  console.log('AVISO: Email nao encontrado para BV thread');\n  return [];\n}\n\nconst originalId = msgs[0].id;\nconst d = $('VERIFICAR_PROTOCOLO_BV').item.json;\n\nconst saudacao  = d.saudacao  || 'Prezado(a)';\nconst protoBV   = d.protocolo_bv || '';\n\nconst corpo =\n  saudacao + ',\\n\\n' +\n  'Informamos que o protocolo BV do seu caso foi registrado com sucesso. ' +\n  'Nossa equipe segue acompanhando e retornará com atualizações.\\n\\n' +\n  'Protocolo BV: ' + protoBV + '\\n\\n\\n' +\n  'Atenciosamente,';\n\nconsole.log('Preparando e-mail BV para', d.email_destinatario, '| protocolo:', protoBV);\n\nreturn [{\n  json: {\n    original_message_id: originalId,\n    id_caso: d['ID Caso'] || '',\n    reply_body: {\n      message: {\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
+        "jsCode": "// Thread ID agora eh o messageId real do e-mail enviado — usamos direto.\nconst d = $('VERIFICAR_PROTOCOLO_BV').item.json;\nconst originalId = d.thread_id_ref || '';\n\nif (!originalId) {\n  console.log('AVISO: Thread ID vazio para BV do caso', d['ID Caso']);\n  return [];\n}\n\nconst saudacao  = d.saudacao  || 'Prezado(a)';\nconst protoBV   = d.protocolo_bv || '';\n\nconst corpo =\n  saudacao + ',\\n\\n' +\n  'Informamos que o protocolo BV do seu caso foi registrado com sucesso. ' +\n  'Nossa equipe segue acompanhando e retornará com atualizações.\\n\\n' +\n  'Protocolo BV: ' + protoBV + '\\n\\n\\n' +\n  'Atenciosamente,';\n\nconsole.log('Preparando e-mail BV para', d.email_destinatario, '| protocolo:', protoBV);\n\nreturn [{\n  json: {\n    original_message_id: originalId,\n    id_caso: d['ID Caso'] || '',\n    reply_body: {\n      message: {\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -493,9 +493,6 @@
       "main": [[{ "node": "Montar Corpo do E-mail", "type": "main", "index": 0 }]]
     },
     "Montar Corpo do E-mail": {
-      "main": [[{ "node": "Buscar Email Original", "type": "main", "index": 0 }]]
-    },
-    "Buscar Email Original": {
       "main": [[{ "node": "Preparar Envio Resposta", "type": "main", "index": 0 }]]
     },
     "Preparar Envio Resposta": {
@@ -514,9 +511,6 @@
       "main": [[{ "node": "Atualizar Invite Enviado", "type": "main", "index": 0 }]]
     },
     "VERIFICAR_PROTOCOLO_BV": {
-      "main": [[{ "node": "Buscar Email BV", "type": "main", "index": 0 }]]
-    },
-    "Buscar Email BV": {
       "main": [[{ "node": "Preparar Resposta BV", "type": "main", "index": 0 }]]
     },
     "Preparar Resposta BV": {
