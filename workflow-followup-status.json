@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://sheets.googleapis.com/v4/spreadsheets/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/values/P%C3%A1gina1",
+        "url": "https://sheets.googleapis.com/v4/spreadsheets/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/values/A%3AZ",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "googleSheetsOAuth2Api",
         "options": {}
