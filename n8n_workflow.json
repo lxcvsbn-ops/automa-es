@@ -41,6 +41,7 @@
     {
       "parameters": {
         "operation": "pdf",
+        "binaryPropertyName": "Fatura_PDF",
         "options": {}
       },
       "id": "extrair-texto-pdf",
