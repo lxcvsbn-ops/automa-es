@@ -1,0 +1,273 @@
+{
+  "name": "Controle Financeiro – PDF para Excel",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fatura-pdf",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-entrada",
+      "name": "Webhook – Receber PDF",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Ponto de entrada. Recebe um POST multipart/form-data com campo 'arquivo' (PDF) e campo opcional 'mes' (ex: Janeiro). Pode ser acionado via WhatsApp Bot, e-mail, ou upload manual."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $binary?.arquivo?.mimeType }}",
+              "operation": "contains",
+              "value2": "pdf"
+            }
+          ]
+        }
+      },
+      "id": "check-pdf",
+      "name": "Verificar se é PDF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"erro\": \"Arquivo não é um PDF. Envie um arquivo .pdf válido.\" }",
+        "options": { "responseCode": 400 }
+      },
+      "id": "erro-nao-pdf",
+      "name": "Erro – Não é PDF",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 440]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "extrair-texto-pdf",
+      "name": "Extrair Texto do PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "notes": "Extrai o texto bruto do PDF da fatura para processamento posterior."
+    },
+    {
+      "parameters": {
+        "model": "claude-opus-4-6",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "=Você é um assistente especialista em análise de faturas bancárias e de cartão de crédito brasileiras.\n\nAnalise o texto da fatura abaixo e extraia TODOS os lançamentos financeiros.\n\nPara cada lançamento retorne um JSON no array \"lancamentos\" com os campos:\n- data: string no formato DD/MM/AAAA\n- descricao: string (nome do estabelecimento/descrição limpa, máx 50 chars)\n- categoria: uma das opções: Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, Vestuário, Assinaturas, Investimentos, Outros\n- tipo: \"Despesa\" ou \"Receita\"\n- valor: número positivo (sem R$, sem vírgula, use ponto decimal)\n- forma_pagamento: \"Crédito\", \"Débito\", \"Pix\", \"Dinheiro\", \"Boleto\" ou \"Transferência\"\n- parcelas: número inteiro (1 se não for parcelado)\n- observacoes: string com informações adicionais relevantes (parcelas, número de conta, etc.) ou string vazia\n\nRegras importantes:\n- Ignore linhas de total, subtotal, pagamento mínimo, saldo anterior, encargos e taxas de câmbio\n- Para compras internacionais, converta a moeda e coloque o valor em BRL na observação\n- Identifique corretamente se é Receita (crédito, estorno, pagamento recebido) ou Despesa\n- Retorne SOMENTE o JSON, sem texto adicional\n\nFormato de resposta:\n{\n  \"mes\": \"NomeDomes\",\n  \"banco\": \"NomeDoBancoOuCartao\",\n  \"periodo\": \"DD/MM/AAAA a DD/MM/AAAA\",\n  \"total_despesas\": 0.00,\n  \"total_receitas\": 0.00,\n  \"lancamentos\": [\n    {\n      \"data\": \"DD/MM/AAAA\",\n      \"descricao\": \"Nome do estabelecimento\",\n      \"categoria\": \"Alimentação\",\n      \"tipo\": \"Despesa\",\n      \"valor\": 0.00,\n      \"forma_pagamento\": \"Crédito\",\n      \"parcelas\": 1,\n      \"observacoes\": \"\"\n    }\n  ]\n}\n\nTexto da fatura:\n{{ $json.text }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.1,
+          "maxTokens": 8000
+        }
+      },
+      "id": "claude-ai-analise",
+      "name": "Claude AI – Analisar Fatura",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "anthropicApi": {
+          "id": "COLOQUE_SEU_CREDENTIAL_ID",
+          "name": "Anthropic API"
+        }
+      },
+      "notes": "CONFIGURAR: Adicione sua credencial da API Anthropic (Claude). Em Settings > Credentials > Anthropic API."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse da resposta JSON do Claude\nconst resposta = $input.first().json.text || $input.first().json.content || '';\n\nlet dados;\ntry {\n  // Tenta extrair JSON da resposta (Claude às vezes adiciona markdown)\n  const jsonMatch = resposta.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('JSON não encontrado na resposta');\n  dados = JSON.parse(jsonMatch[0]);\n} catch (e) {\n  return [{ json: { erro: 'Falha ao parsear resposta do Claude: ' + e.message, resposta_bruta: resposta } }];\n}\n\n// Determinar o mês a partir da resposta ou do parâmetro enviado\nconst mesesMap = {\n  'janeiro': 'Janeiro', 'fevereiro': 'Fevereiro', 'março': 'Março', 'marco': 'Março',\n  'abril': 'Abril', 'maio': 'Maio', 'junho': 'Junho', 'julho': 'Julho',\n  'agosto': 'Agosto', 'setembro': 'Setembro', 'outubro': 'Outubro',\n  'novembro': 'Novembro', 'dezembro': 'Dezembro'\n};\n\nconst mesRaw = (dados.mes || '').toLowerCase().trim();\nconst mes = mesesMap[mesRaw] || dados.mes || 'Outros';\n\n// Formatar lançamentos\nconst lancamentos = (dados.lancamentos || []).map(l => ({\n  mes: mes,\n  banco: dados.banco || 'N/A',\n  periodo: dados.periodo || '',\n  data: l.data || '',\n  descricao: l.descricao || '',\n  categoria: l.categoria || 'Outros',\n  tipo: l.tipo || 'Despesa',\n  valor: parseFloat(l.valor) || 0,\n  forma_pagamento: l.forma_pagamento || 'Outros',\n  parcelas: parseInt(l.parcelas) || 1,\n  observacoes: l.observacoes || ''\n}));\n\n// Retornar metadados + array de lançamentos\nreturn [{\n  json: {\n    mes,\n    banco: dados.banco || 'N/A',\n    periodo: dados.periodo || '',\n    total_despesas: dados.total_despesas || 0,\n    total_receitas: dados.total_receitas || 0,\n    quantidade: lancamentos.length,\n    lancamentos\n  }\n}];"
+      },
+      "id": "parsear-json",
+      "name": "Parsear JSON dos Lançamentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.erro }}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-erro-parse",
+      "name": "Verificar Erro de Parse",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"erro\": $json.erro, \"detalhe\": $json.resposta_bruta?.substring(0, 500) } }}",
+        "options": { "responseCode": 422 }
+      },
+      "id": "erro-parse",
+      "name": "Erro – Falha no Parse",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 440]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Expande o array de lançamentos para itens individuais do N8N\nconst dados = $input.first().json;\nconst lancamentos = dados.lancamentos || [];\n\nreturn lancamentos.map(l => ({ json: l }));"
+      },
+      "id": "split-lancamentos",
+      "name": "Dividir em Lançamentos Individuais",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "COLOQUE_O_ID_DO_GOOGLE_SHEETS_AQUI",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $json.mes }}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Data":           "={{ $json.data }}",
+            "Descrição":      "={{ $json.descricao }}",
+            "Categoria":      "={{ $json.categoria }}",
+            "Tipo":           "={{ $json.tipo }}",
+            "Valor (R$)":     "={{ $json.valor }}",
+            "Forma Pagto":    "={{ $json.forma_pagamento }}",
+            "Parcelas":       "={{ $json.parcelas }}",
+            "Observações":    "={{ $json.observacoes }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "google-sheets-append",
+      "name": "Google Sheets – Adicionar Linha",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1780, 180],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "COLOQUE_SEU_CREDENTIAL_ID",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "notes": "OPCIONAL: Preenche o Google Sheets automaticamente. Alternativa ao Excel local. Configure o ID do spreadsheet e credenciais OAuth2."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Agrega todos os lançamentos processados\nconst items = $input.all();\nconst lancamentos = items.map(i => i.json);\n\nconst total_despesas = lancamentos\n  .filter(l => l.tipo === 'Despesa')\n  .reduce((s, l) => s + l.valor, 0);\n\nconst total_receitas = lancamentos\n  .filter(l => l.tipo === 'Receita')\n  .reduce((s, l) => s + l.valor, 0);\n\n// Agrupa por categoria\nconst por_categoria = {};\nlancamentos.forEach(l => {\n  if (l.tipo === 'Despesa') {\n    por_categoria[l.categoria] = (por_categoria[l.categoria] || 0) + l.valor;\n  }\n});\n\nconst categorias_ordenadas = Object.entries(por_categoria)\n  .sort((a, b) => b[1] - a[1])\n  .map(([cat, val]) => ({ categoria: cat, valor: val.toFixed(2) }));\n\nreturn [{\n  json: {\n    mes: lancamentos[0]?.mes || '',\n    banco: lancamentos[0]?.banco || '',\n    total_lancamentos: lancamentos.length,\n    total_despesas: total_despesas.toFixed(2),\n    total_receitas: total_receitas.toFixed(2),\n    saldo: (total_receitas - total_despesas).toFixed(2),\n    top_categorias: categorias_ordenadas.slice(0, 5),\n    lancamentos\n  }\n}];"
+      },
+      "id": "agregar-resultados",
+      "name": "Agregar Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"sucesso\": true,\n  \"mes\": $json.mes,\n  \"banco\": $json.banco,\n  \"lancamentos_importados\": $json.total_lancamentos,\n  \"total_despesas\": \"R$ \" + $json.total_despesas,\n  \"total_receitas\": \"R$ \" + $json.total_receitas,\n  \"saldo\": \"R$ \" + $json.saldo,\n  \"top_categorias\": $json.top_categorias,\n  \"mensagem\": \"Fatura processada com sucesso! \" + $json.total_lancamentos + \" lançamentos importados para \" + $json.mes + \".\"\n} }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "resposta-sucesso",
+      "name": "Resposta – Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 300]
+    }
+  ],
+  "connections": {
+    "Webhook – Receber PDF": {
+      "main": [[{ "node": "Verificar se é PDF", "type": "main", "index": 0 }]]
+    },
+    "Verificar se é PDF": {
+      "main": [
+        [{ "node": "Extrair Texto do PDF",   "type": "main", "index": 0 }],
+        [{ "node": "Erro – Não é PDF",        "type": "main", "index": 0 }]
+      ]
+    },
+    "Extrair Texto do PDF": {
+      "main": [[{ "node": "Claude AI – Analisar Fatura", "type": "main", "index": 0 }]]
+    },
+    "Claude AI – Analisar Fatura": {
+      "main": [[{ "node": "Parsear JSON dos Lançamentos", "type": "main", "index": 0 }]]
+    },
+    "Parsear JSON dos Lançamentos": {
+      "main": [[{ "node": "Verificar Erro de Parse", "type": "main", "index": 0 }]]
+    },
+    "Verificar Erro de Parse": {
+      "main": [
+        [{ "node": "Dividir em Lançamentos Individuais", "type": "main", "index": 0 }],
+        [{ "node": "Erro – Falha no Parse",               "type": "main", "index": 0 }]
+      ]
+    },
+    "Dividir em Lançamentos Individuais": {
+      "main": [[
+        { "node": "Google Sheets – Adicionar Linha", "type": "main", "index": 0 }
+      ]]
+    },
+    "Google Sheets – Adicionar Linha": {
+      "main": [[{ "node": "Agregar Resultados", "type": "main", "index": 0 }]]
+    },
+    "Agregar Resultados": {
+      "main": [[{ "node": "Resposta – Sucesso", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "_readme": {
+    "descricao": "Workflow N8N para processar faturas em PDF e importar lançamentos para planilha de controle financeiro.",
+    "requisitos": [
+      "N8N v1.0+ instalado (self-hosted ou cloud)",
+      "Credencial Anthropic API (Claude) configurada no N8N",
+      "Credencial Google Sheets OAuth2 configurada (se usar Google Sheets)",
+      "Ou usar o script Python importar_para_excel.py para alimentar o arquivo .xlsx local"
+    ],
+    "configuracao": [
+      "1. Importe este JSON no N8N (Settings > Import Workflow)",
+      "2. Configure a credencial 'Anthropic API' com sua chave de API",
+      "3. Se usar Google Sheets: configure OAuth2 e coloque o ID do spreadsheet no nó 'Google Sheets – Adicionar Linha'",
+      "4. Ative o workflow",
+      "5. O webhook estará disponível em: https://SEU_N8N/webhook/fatura-pdf"
+    ],
+    "como_usar": [
+      "Envie um POST para o webhook com o PDF no campo 'arquivo' (multipart/form-data)",
+      "Exemplo curl: curl -X POST https://SEU_N8N/webhook/fatura-pdf -F 'arquivo=@fatura.pdf'",
+      "A resposta JSON conterá todos os lançamentos extraídos e o resumo por categoria"
+    ],
+    "alternativa_excel_local": "Use o script importar_para_excel.py para pegar a resposta JSON do webhook e inserir diretamente no arquivo .xlsx local sem Google Sheets."
+  }
+}
