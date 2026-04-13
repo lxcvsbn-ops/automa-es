@@ -51,6 +51,16 @@
     },
     {
       "parameters": {
+        "jsCode": "// Monta o corpo da requisição para a API Anthropic\n// Fazendo aqui no Code evita problemas de serialização no HTTP Request\nconst textoFatura = $input.first().json.text || '';\n\nconst prompt = `Você é um assistente especialista em análise de faturas bancárias e de cartão de crédito brasileiras.\n\nAnalise o texto da fatura abaixo e extraia TODOS os lançamentos financeiros.\n\nPara cada lançamento retorne um JSON no array \"lancamentos\" com os campos:\n- data: string no formato DD/MM/AAAA\n- descricao: string (nome do estabelecimento limpo, máx 50 chars)\n- categoria: APENAS uma dessas opções: Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, Vestuário, Assinaturas, Investimentos, Outros\n- tipo: \"Despesa\" ou \"Receita\"\n- valor: número positivo com ponto decimal (ex: 89.90)\n- forma_pagamento: \"Crédito\", \"Débito\", \"Pix\", \"Dinheiro\", \"Boleto\" ou \"Transferência\"\n- parcelas: número inteiro (1 se não parcelado)\n- observacoes: informações extras ou string vazia\n\nRegras:\n- Ignore: total da fatura, pagamento mínimo, saldo anterior, encargos, IOF, multas\n- Estornos e créditos = tipo Receita\n- Retorne SOMENTE o JSON puro, sem markdown, sem texto adicional\n\nFormato exato:\n{\"mes\":\"NomeDoMes\",\"banco\":\"NomeDoBanco\",\"periodo\":\"DD/MM/AAAA a DD/MM/AAAA\",\"total_despesas\":0.00,\"total_receitas\":0.00,\"lancamentos\":[{\"data\":\"DD/MM/AAAA\",\"descricao\":\"Nome\",\"categoria\":\"Alimentação\",\"tipo\":\"Despesa\",\"valor\":0.00,\"forma_pagamento\":\"Crédito\",\"parcelas\":1,\"observacoes\":\"\"}]}\n\nTexto da fatura:\n${textoFatura}`;\n\nreturn [{\n  json: {\n    model: 'claude-opus-4-6',\n    max_tokens: 8000,\n    messages: [\n      { role: 'user', content: prompt }\n    ]\n  }\n}];"
+      },
+      "id": "montar-prompt",
+      "name": "Montar Prompt para Claude",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://api.anthropic.com/v1/messages",
         "authentication": "predefinedCredentialType",
@@ -65,23 +75,14 @@
           ]
         },
         "sendBody": true,
-        "contentType": "json",
-        "body": {
-          "model": "claude-opus-4-6",
-          "max_tokens": 8000,
-          "messages": [
-            {
-              "role": "user",
-              "content": "=Você é um assistente especialista em análise de faturas bancárias e de cartão de crédito brasileiras.\n\nAnalise o texto da fatura abaixo e extraia TODOS os lançamentos financeiros.\n\nPara cada lançamento retorne um JSON no array \"lancamentos\" com os campos:\n- data: string no formato DD/MM/AAAA\n- descricao: string (nome do estabelecimento limpo, máx 50 chars)\n- categoria: APENAS uma dessas opções: Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, Vestuário, Assinaturas, Investimentos, Outros\n- tipo: \"Despesa\" ou \"Receita\"\n- valor: número positivo com ponto decimal (ex: 89.90)\n- forma_pagamento: \"Crédito\", \"Débito\", \"Pix\", \"Dinheiro\", \"Boleto\" ou \"Transferência\"\n- parcelas: número inteiro (1 se não parcelado)\n- observacoes: informações extras ou string vazia\n\nRegras:\n- Ignore: total da fatura, pagamento mínimo, saldo anterior, encargos, IOF, multas\n- Estornos e créditos = tipo Receita\n- Retorne SOMENTE o JSON puro, sem markdown, sem texto adicional\n\nFormato exato:\n{\"mes\":\"NomeDoMes\",\"banco\":\"NomeDoBanco\",\"periodo\":\"DD/MM/AAAA a DD/MM/AAAA\",\"total_despesas\":0.00,\"total_receitas\":0.00,\"lancamentos\":[{\"data\":\"DD/MM/AAAA\",\"descricao\":\"Nome\",\"categoria\":\"Alimentação\",\"tipo\":\"Despesa\",\"valor\":0.00,\"forma_pagamento\":\"Crédito\",\"parcelas\":1,\"observacoes\":\"\"}]}\n\nTexto da fatura:\n{{ $json.text }}"
-            }
-          ]
-        }
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
       },
       "id": "claude-http",
       "name": "Claude – Analisar Fatura",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [720, 300],
+      "position": [960, 300],
       "credentials": {
         "anthropicApi": {
           "id": "ANTHROPIC_CREDENTIAL_ID",
@@ -91,13 +92,13 @@
     },
     {
       "parameters": {
-        "jsCode": "// A resposta da API Anthropic vem em content[0].text\nconst resposta = $input.first().json.content?.[0]?.text || '';\n\nlet dados;\ntry {\n  const jsonMatch = resposta.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('JSON não encontrado na resposta');\n  dados = JSON.parse(jsonMatch[0]);\n} catch (e) {\n  return [{ json: { erro: true, mensagem: 'Falha ao ler resposta do Claude: ' + e.message, raw: resposta.substring(0,300) } }];\n}\n\nconst mesesMap = {\n  'janeiro':'Janeiro','fevereiro':'Fevereiro','março':'Março','marco':'Março',\n  'abril':'Abril','maio':'Maio','junho':'Junho','julho':'Julho',\n  'agosto':'Agosto','setembro':'Setembro','outubro':'Outubro',\n  'novembro':'Novembro','dezembro':'Dezembro'\n};\n\nconst mesFormulario = $('Formulário – Upload de Fatura').first().json['Mês de referência (opcional – ex: Abril)'] || '';\nconst mesIA = (dados.mes || '').toLowerCase().trim();\nconst mes = mesFormulario || mesesMap[mesIA] || dados.mes || 'Indefinido';\nconst email = $('Formulário – Upload de Fatura').first().json['Seu e-mail (para receber os lançamentos)'] || '';\n\nconst lancamentos = (dados.lancamentos || []).map(l => ({\n  mes,\n  data:            l.data || '',\n  descricao:       l.descricao || '',\n  categoria:       l.categoria || 'Outros',\n  tipo:            l.tipo || 'Despesa',\n  valor:           parseFloat(l.valor) || 0,\n  forma_pagamento: l.forma_pagamento || '',\n  parcelas:        parseInt(l.parcelas) || 1,\n  observacoes:     l.observacoes || ''\n}));\n\nconst total_despesas = lancamentos.filter(l => l.tipo === 'Despesa').reduce((s,l) => s + l.valor, 0);\nconst total_receitas = lancamentos.filter(l => l.tipo === 'Receita').reduce((s,l) => s + l.valor, 0);\n\nconst por_cat = {};\nlancamentos.forEach(l => { if (l.tipo==='Despesa') por_cat[l.categoria]=(por_cat[l.categoria]||0)+l.valor; });\nconst top_cat = Object.entries(por_cat).sort((a,b)=>b[1]-a[1]).slice(0,5);\n\nconst csvHeader = 'Data,Descrição,Categoria,Tipo,Valor (R$),Forma Pagto,Parcelas,Observações';\nconst csvLinhas = lancamentos.map(l =>\n  `\"${l.data}\",\"${l.descricao}\",\"${l.categoria}\",\"${l.tipo}\",\"${l.valor.toFixed(2).replace('.',',')}\",\"${l.forma_pagamento}\",\"${l.parcelas}\",\"${l.observacoes}\"`\n);\nconst csv = [csvHeader, ...csvLinhas].join('\\n');\n\nconst topCatHTML = top_cat.map(([c,v]) =>\n  `<tr><td style=\"padding:6px 12px;border-bottom:1px solid #eee\">${c}</td><td style=\"padding:6px 12px;border-bottom:1px solid #eee;text-align:right\">R$ ${v.toFixed(2).replace('.',',')}</td></tr>`\n).join('');\n\nconst linhasHTML = lancamentos.map(l =>\n  `<tr><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0;white-space:nowrap\">${l.data}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0\">${l.descricao}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0\">${l.categoria}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0;color:${l.tipo==='Receita'?'#16a34a':'#dc2626'}\">${l.tipo}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600\">R$ ${l.valor.toFixed(2).replace('.',',')}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0\">${l.forma_pagamento}</td></tr>`\n).join('');\n\nconst html = `<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head><body style=\"font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px;color:#1e1e2e\"><div style=\"background:#1e1e2e;color:#fff;padding:24px;border-radius:12px;margin-bottom:24px\"><h1 style=\"margin:0 0 4px\">Controle Financeiro</h1><p style=\"margin:0;color:#a0a0c0\">Fatura processada – ${mes} · ${dados.banco||''}</p></div><div style=\"display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap\"><div style=\"flex:1;min-width:150px;background:#dcfce7;border-radius:8px;padding:16px\"><div style=\"font-size:11px;color:#166534;font-weight:600\">RECEITAS</div><div style=\"font-size:20px;font-weight:700;color:#16a34a\">R$ ${total_receitas.toFixed(2).replace('.',',')}</div></div><div style=\"flex:1;min-width:150px;background:#fee2e2;border-radius:8px;padding:16px\"><div style=\"font-size:11px;color:#991b1b;font-weight:600\">DESPESAS</div><div style=\"font-size:20px;font-weight:700;color:#dc2626\">R$ ${total_despesas.toFixed(2).replace('.',',')}</div></div><div style=\"flex:1;min-width:150px;background:#ede9fe;border-radius:8px;padding:16px\"><div style=\"font-size:11px;color:#5b21b6;font-weight:600\">SALDO</div><div style=\"font-size:20px;font-weight:700;color:#7c3aed\">R$ ${(total_receitas-total_despesas).toFixed(2).replace('.',',')}</div></div><div style=\"flex:1;min-width:150px;background:#fef9c3;border-radius:8px;padding:16px\"><div style=\"font-size:11px;color:#854d0e;font-weight:600\">LANÇAMENTOS</div><div style=\"font-size:20px;font-weight:700;color:#ca8a04\">${lancamentos.length}</div></div></div><h2 style=\"font-size:15px;margin-bottom:8px\">Top Categorias</h2><table style=\"width:100%;border-collapse:collapse;margin-bottom:24px;background:#f9f9f9;border-radius:8px;overflow:hidden\">${topCatHTML}</table><h2 style=\"font-size:15px;margin-bottom:4px\">Todos os Lançamentos</h2><p style=\"font-size:12px;color:#666;margin-bottom:8px\">O arquivo CSV completo está em anexo para importar no Excel.</p><table style=\"width:100%;border-collapse:collapse;font-size:12px\"><thead><tr style=\"background:#1e1e2e;color:#fff\"><th style=\"padding:8px;text-align:left\">Data</th><th style=\"padding:8px;text-align:left\">Descrição</th><th style=\"padding:8px;text-align:left\">Categoria</th><th style=\"padding:8px;text-align:left\">Tipo</th><th style=\"padding:8px;text-align:right\">Valor</th><th style=\"padding:8px;text-align:left\">Forma</th></tr></thead><tbody>${linhasHTML}</tbody></table><p style=\"margin-top:24px;font-size:11px;color:#999\">Gerado automaticamente · Revise antes de usar.</p></body></html>`;\n\nreturn [{ json: { mes, email, banco: dados.banco||'', lancamentos, total_despesas, total_receitas, csv, html, quantidade: lancamentos.length } }];"
+        "jsCode": "// A resposta da API Anthropic vem em content[0].text\nconst resposta = $input.first().json.content?.[0]?.text || '';\n\nlet dados;\ntry {\n  const jsonMatch = resposta.match(/\\{[\\s\\S]*\\}/);\n  if (!jsonMatch) throw new Error('JSON não encontrado na resposta');\n  dados = JSON.parse(jsonMatch[0]);\n} catch (e) {\n  return [{ json: { erro: true, mensagem: 'Falha ao ler resposta do Claude: ' + e.message, raw: resposta.substring(0,300) } }];\n}\n\nconst mesesMap = {\n  'janeiro':'Janeiro','fevereiro':'Fevereiro','março':'Março','marco':'Março',\n  'abril':'Abril','maio':'Maio','junho':'Junho','julho':'Julho',\n  'agosto':'Agosto','setembro':'Setembro','outubro':'Outubro',\n  'novembro':'Novembro','dezembro':'Dezembro'\n};\n\nconst mesFormulario = $('Formulário – Upload de Fatura').first().json['Mês de referência (opcional – ex: Abril)'] || '';\nconst mesIA = (dados.mes || '').toLowerCase().trim();\nconst mes = mesFormulario || mesesMap[mesIA] || dados.mes || 'Indefinido';\nconst email = $('Formulário – Upload de Fatura').first().json['Seu e-mail (para receber os lançamentos)'] || '';\n\nconst lancamentos = (dados.lancamentos || []).map(l => ({\n  mes,\n  data:            l.data || '',\n  descricao:       l.descricao || '',\n  categoria:       l.categoria || 'Outros',\n  tipo:            l.tipo || 'Despesa',\n  valor:           parseFloat(l.valor) || 0,\n  forma_pagamento: l.forma_pagamento || '',\n  parcelas:        parseInt(l.parcelas) || 1,\n  observacoes:     l.observacoes || ''\n}));\n\nconst total_despesas = lancamentos.filter(l => l.tipo === 'Despesa').reduce((s,l) => s + l.valor, 0);\nconst total_receitas = lancamentos.filter(l => l.tipo === 'Receita').reduce((s,l) => s + l.valor, 0);\n\nconst por_cat = {};\nlancamentos.forEach(l => { if (l.tipo==='Despesa') por_cat[l.categoria]=(por_cat[l.categoria]||0)+l.valor; });\nconst top_cat = Object.entries(por_cat).sort((a,b)=>b[1]-a[1]).slice(0,5);\n\nconst csvHeader = 'Data,Descrição,Categoria,Tipo,Valor (R$),Forma Pagto,Parcelas,Observações';\nconst csvLinhas = lancamentos.map(l =>\n  `\"${l.data}\",\"${l.descricao}\",\"${l.categoria}\",\"${l.tipo}\",\"${l.valor.toFixed(2).replace('.',',')}\",\"${l.forma_pagamento}\",\"${l.parcelas}\",\"${l.observacoes}\"`\n);\nconst csv = [csvHeader, ...csvLinhas].join('\\n');\n\nconst topCatHTML = top_cat.map(([c,v]) =>\n  `<tr><td style=\"padding:6px 12px;border-bottom:1px solid #eee\">${c}</td><td style=\"padding:6px 12px;border-bottom:1px solid #eee;text-align:right\">R$ ${v.toFixed(2).replace('.',',')}</td></tr>`\n).join('');\n\nconst linhasHTML = lancamentos.map(l =>\n  `<tr><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0;white-space:nowrap\">${l.data}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0\">${l.descricao}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0\">${l.categoria}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0;color:${l.tipo==='Receita'?'#16a34a':'#dc2626'}\">${l.tipo}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600\">R$ ${l.valor.toFixed(2).replace('.',',')}</td><td style=\"padding:5px 8px;border-bottom:1px solid #f0f0f0\">${l.forma_pagamento}</td></tr>`\n).join('');\n\nconst html = `<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head><body style=\"font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px;color:#1e1e2e\"><div style=\"background:#1e1e2e;color:#fff;padding:24px;border-radius:12px;margin-bottom:24px\"><h1 style=\"margin:0 0 4px\">Controle Financeiro</h1><p style=\"margin:0;color:#a0a0c0\">Fatura processada – ${mes} · ${dados.banco||''}</p></div><div style=\"display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap\"><div style=\"flex:1;min-width:150px;background:#dcfce7;border-radius:8px;padding:16px\"><div style=\"font-size:11px;color:#166534;font-weight:600\">RECEITAS</div><div style=\"font-size:20px;font-weight:700;color:#16a34a\">R$ ${total_receitas.toFixed(2).replace('.',',')}</div></div><div style=\"flex:1;min-width:150px;background:#fee2e2;border-radius:8px;padding:16px\"><div style=\"font-size:11px;color:#991b1b;font-weight:600\">DESPESAS</div><div style=\"font-size:20px;font-weight:700;color:#dc2626\">R$ ${total_despesas.toFixed(2).replace('.',',')}</div></div><div style=\"flex:1;min-width:150px;background:#ede9fe;border-radius:8px;padding:16px\"><div style=\"font-size:11px;color:#5b21b6;font-weight:600\">SALDO</div><div style=\"font-size:20px;font-weight:700;color:#7c3aed\">R$ ${(total_receitas-total_despesas).toFixed(2).replace('.',',')}</div></div><div style=\"flex:1;min-width:150px;background:#fef9c3;border-radius:8px;padding:16px\"><div style=\"font-size:11px;color:#854d0e;font-weight:600\">LANÇAMENTOS</div><div style=\"font-size:20px;font-weight:700;color:#ca8a04\">${lancamentos.length}</div></div></div><h2 style=\"font-size:15px;margin-bottom:8px\">Top Categorias</h2><table style=\"width:100%;border-collapse:collapse;margin-bottom:24px;background:#f9f9f9;border-radius:8px;overflow:hidden\">${topCatHTML}</table><h2 style=\"font-size:15px;margin-bottom:4px\">Todos os Lançamentos</h2><p style=\"font-size:12px;color:#666;margin-bottom:8px\">O arquivo CSV completo está em anexo — abra no Excel e cole na aba do mês.</p><table style=\"width:100%;border-collapse:collapse;font-size:12px\"><thead><tr style=\"background:#1e1e2e;color:#fff\"><th style=\"padding:8px;text-align:left\">Data</th><th style=\"padding:8px;text-align:left\">Descrição</th><th style=\"padding:8px;text-align:left\">Categoria</th><th style=\"padding:8px;text-align:left\">Tipo</th><th style=\"padding:8px;text-align:right\">Valor</th><th style=\"padding:8px;text-align:left\">Forma</th></tr></thead><tbody>${linhasHTML}</tbody></table><p style=\"margin-top:24px;font-size:11px;color:#999\">Gerado automaticamente · Revise antes de usar.</p></body></html>`;\n\nreturn [{ json: { mes, email, banco: dados.banco||'', lancamentos, total_despesas, total_receitas, csv, html, quantidade: lancamentos.length } }];"
       },
       "id": "parsear-e-montar",
       "name": "Parsear e Montar Relatório",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 300]
+      "position": [1200, 300]
     },
     {
       "parameters": {
@@ -107,7 +108,7 @@
       "name": "Preparar CSV como Anexo",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 300]
+      "position": [1440, 300]
     },
     {
       "parameters": {
@@ -129,7 +130,7 @@
       "name": "Enviar E-mail com Relatório",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2,
-      "position": [1440, 300],
+      "position": [1680, 300],
       "credentials": {
         "gmailOAuth2": {
           "id": "GMAIL_CREDENTIAL_ID",
@@ -143,6 +144,9 @@
       "main": [[{ "node": "Extrair Texto do PDF", "type": "main", "index": 0 }]]
     },
     "Extrair Texto do PDF": {
+      "main": [[{ "node": "Montar Prompt para Claude", "type": "main", "index": 0 }]]
+    },
+    "Montar Prompt para Claude": {
       "main": [[{ "node": "Claude – Analisar Fatura", "type": "main", "index": 0 }]]
     },
     "Claude – Analisar Fatura": {
@@ -161,18 +165,5 @@
   },
   "staticData": null,
   "meta": { "templateCredsSetupCompleted": false },
-  "pinData": {},
-  "_instrucoes_configuracao": {
-    "credenciais_necessarias": [
-      "1. Anthropic API: Settings → Credentials → + Add → Anthropic API → cole sua chave sk-ant-...",
-      "2. Gmail: Settings → Credentials → + Add → Gmail OAuth2 → Connect my account"
-    ],
-    "apos_importar": [
-      "No nó 'Claude – Analisar Fatura': Credential → selecione Anthropic API",
-      "No nó 'Enviar E-mail com Relatório': Credential → selecione Gmail",
-      "Ative o workflow (toggle superior direito)",
-      "Copie a URL do formulário no nó 'Formulário – Upload de Fatura' e salve nos favoritos"
-    ],
-    "fluxo": "Formulário → Extrair PDF → Claude (HTTP) → Parsear → CSV → Email"
-  }
+  "pinData": {}
 }
