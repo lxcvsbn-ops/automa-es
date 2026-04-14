@@ -1,0 +1,209 @@
+{
+  "name": "Controle Financeiro – Telegram PDF",
+  "_instrucoes": {
+    "descricao": "Recebe PDFs de faturas enviados via Telegram (bot ou grupo) e processa automaticamente: extrai lançamentos com Claude, salva no Google Sheets e confirma via Telegram.",
+    "configurar": [
+      "1. Criar bot no Telegram via @BotFather → /newbot → copie o TOKEN",
+      "2. Criar um grupo ou usar chat privado; adicione o bot como administrador",
+      "3. No N8N: Settings > Credentials > New → Telegram API → cole o TOKEN",
+      "4. Configure a credencial nos nós: 'Telegram Trigger', 'Telegram – Confirmar' e 'Telegram – Erro'",
+      "5. Preencha COLOQUE_O_ID_DO_GOOGLE_SHEETS com o ID da sua planilha Google",
+      "6. Configure a credencial do Google Sheets OAuth2",
+      "7. Configure a credencial Anthropic (Header Auth: Name=x-api-key, Value=sua-chave)",
+      "8. Ative o workflow – o bot começará a receber mensagens",
+      "9. Envie um PDF da fatura para o bot ou grupo. Dica: adicione o mês na legenda, ex: 'Abril'"
+    ],
+    "telegram_botfather": [
+      "/start → /newbot → escolha nome e username",
+      "Copie o token no formato 123456789:AABBCCddEEFF...",
+      "Para adicionar a um grupo: adicione o bot como membro e torne-o admin",
+      "O bot recebe mensagens do grupo automaticamente via Telegram Trigger"
+    ]
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger", "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger", "typeVersion": 1,
+      "position": [200, 300],
+      "credentials": { "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" } },
+      "notes": "Recebe todas as mensagens do bot. Só processa mensagens com documento PDF."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrai informações do documento PDF recebido via Telegram.\n// Suporta mensagens diretas ao bot e mensagens em grupos.\nconst msg = $input.first().json?.message || $input.first().json?.channel_post || {};\nconst chatId   = msg?.chat?.id || '';\nconst doc      = msg?.document || null;\nconst caption  = msg?.caption || '';\n\nif (!doc) {\n  return [{ json: { ignorar: true, motivo: 'Mensagem sem documento', chatId } }];\n}\n\nconst mime = doc.mime_type || '';\nif (!mime.includes('pdf')) {\n  return [{ json: { ignorar: true, motivo: 'Arquivo não é PDF', chatId } }];\n}\n\n// Extrair mês da legenda, se informado\nconst mMap = {\n  'janeiro':'Janeiro','fevereiro':'Fevereiro','março':'Março','marco':'Março',\n  'abril':'Abril','maio':'Maio','junho':'Junho','julho':'Julho',\n  'agosto':'Agosto','setembro':'Setembro','outubro':'Outubro',\n  'novembro':'Novembro','dezembro':'Dezembro'\n};\nconst captionLower = caption.toLowerCase();\nconst mesCaption = Object.entries(mMap).find(([k]) => captionLower.includes(k))?.[1] || '';\n\nreturn [{ json: {\n  ignorar:   false,\n  fileId:    doc.file_id,\n  fileName:  doc.file_name || 'fatura.pdf',\n  chatId,\n  mesCaption,\n  caption\n} }];"
+      },
+      "id": "extrair-doc", "name": "Extrair Documento",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.ignorar }}", "value2": false }]
+        }
+      },
+      "id": "check-pdf", "name": "É um PDF?",
+      "type": "n8n-nodes-base.if", "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ '❌ *Arquivo inválido*\\n\\n' + $json.motivo + '.\\n\\nPor favor, envie o *PDF da fatura*. Você pode adicionar o mês na legenda (ex: _Abril_).' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "telegram-erro-doc", "name": "Telegram – Avisar Sem PDF",
+      "type": "n8n-nodes-base.telegram", "typeVersion": 1,
+      "position": [920, 460],
+      "credentials": { "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" } }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/bot{{ $credentials.telegramApi.accessToken }}/getFile",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [{ "name": "file_id", "value": "={{ $json.fileId }}" }] },
+        "options": {}
+      },
+      "id": "get-file-info", "name": "Obter Info do Arquivo",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [920, 300],
+      "credentials": { "httpHeaderAuth": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" } },
+      "notes": "Chama getFile para obter o file_path necessário para download."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combina o file_path retornado pelo getFile com o chatId/mesCaption vindos do nó anterior.\nconst filePath = $input.first().json.result?.file_path || '';\nconst docData  = $('Extrair Documento').first().json;\nif (!filePath) throw new Error('file_path não retornado pelo Telegram. Verifique o file_id.');\nreturn [{ json: { ...docData, filePath } }];"
+      },
+      "id": "montar-url-download", "name": "Montar URL de Download",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1160, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.telegram.org/file/bot{{ $credentials.telegramApi.accessToken }}/{{ $json.filePath }}",
+        "options": { "response": { "response": { "responseFormat": "file" } } }
+      },
+      "id": "baixar-pdf", "name": "Baixar PDF",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [1400, 300],
+      "credentials": { "httpHeaderAuth": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" } },
+      "notes": "Faz o download do PDF diretamente do Telegram."
+    },
+    {
+      "parameters": { "operation": "pdf", "binaryPropertyName": "data", "options": {} },
+      "id": "extrair-texto", "name": "Extrair Texto do PDF",
+      "type": "n8n-nodes-base.extractFromFile", "typeVersion": 1,
+      "position": [1640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Monta o prompt para o Claude com o texto extraído do PDF.\nconst texto      = $input.first().json.text || '';\nconst chatId     = $('Extrair Documento').first().json.chatId;\nconst mesCaption = $('Extrair Documento').first().json.mesCaption || '';\n\nconst prompt = `Você é especialista em faturas bancárias brasileiras.\\n\\nAnalise a fatura e extraia TODOS os lançamentos. Identifique também o banco/cartão de origem.\\n\\nRetorne SOMENTE JSON puro (sem markdown):\\n{\\n  \"mes\": \"NomeDoMes\",\\n  \"banco\": \"NomeExatoDoBancoOuCartao\",\\n  \"periodo\": \"DD/MM/AAAA a DD/MM/AAAA\",\\n  \"total_despesas\": 0.00,\\n  \"total_receitas\": 0.00,\\n  \"lancamentos\": [\\n    {\\n      \"data\": \"DD/MM/AAAA\",\\n      \"descricao\": \"Nome limpo max 50 chars\",\\n      \"categoria\": \"Alimentação|Moradia|Transporte|Saúde|Educação|Lazer|Vestuário|Assinaturas|Investimentos|Outros\",\\n      \"tipo\": \"Despesa|Receita\",\\n      \"valor\": 0.00,\\n      \"forma_pagamento\": \"Crédito|Débito|Pix|Dinheiro|Boleto|Transferência\",\\n      \"cartao\": \"NomeExatoDoBanco\",\\n      \"parcelas\": 1,\\n      \"observacoes\": \"\"\\n    }\\n  ]\\n}\\n\\nRegras:\\n- Ignore: total, pagamento mínimo, saldo anterior, encargos, IOF\\n- Estornos/créditos = Receita\\n- campo \"cartao\" = mesmo valor de \"banco\" para todos os lançamentos\\n\\nTexto da fatura:\\n${texto}`;\n\nreturn [{ json: {\n  model: 'claude-opus-4-6',\n  max_tokens: 8000,\n  messages: [{ role: 'user', content: prompt }],\n  _chatId: chatId,\n  _mesCaption: mesCaption\n} }];"
+      },
+      "id": "montar-prompt", "name": "Montar Prompt",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1880, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "anthropic-version", "value": "2023-06-01" },
+          { "name": "content-type",      "value": "application/json" }
+        ]},
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, max_tokens: $json.max_tokens, messages: $json.messages }) }}"
+      },
+      "id": "claude-api", "name": "Claude – Analisar Fatura",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [2120, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HEADER_AUTH_ID", "name": "Anthropic x-api-key" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resposta   = $input.first().json.content?.[0]?.text || '';\nconst promptNode = $('Montar Prompt').first().json;\nconst chatId     = promptNode._chatId;\nconst mesCaption = promptNode._mesCaption;\n\nconst mMap = {\n  'janeiro':'Janeiro','fevereiro':'Fevereiro','março':'Março','marco':'Março',\n  'abril':'Abril','maio':'Maio','junho':'Junho','julho':'Julho',\n  'agosto':'Agosto','setembro':'Setembro','outubro':'Outubro',\n  'novembro':'Novembro','dezembro':'Dezembro'\n};\n\nlet dados;\ntry {\n  const m = resposta.match(/\\{[\\s\\S]*\\}/);\n  if (!m) throw new Error('JSON não encontrado na resposta do Claude');\n  dados = JSON.parse(m[0]);\n} catch(e) {\n  return [{ json: { erro: true, msg: e.message, chatId } }];\n}\n\nconst mes   = mesCaption || mMap[(dados.mes||'').toLowerCase().trim()] || dados.mes || 'Indefinido';\nconst banco = dados.banco || 'N/A';\n\nconst lancamentos = (dados.lancamentos||[]).map(l => ({\n  mes, banco,\n  data:            l.data||'',\n  descricao:       (l.descricao||'').substring(0, 50),\n  categoria:       l.categoria||'Outros',\n  tipo:            l.tipo||'Despesa',\n  valor:           parseFloat(l.valor)||0,\n  forma_pagamento: l.forma_pagamento||'',\n  cartao:          l.cartao||banco,\n  parcelas:        parseInt(l.parcelas)||1,\n  observacoes:     l.observacoes||''\n}));\n\nconst tot_desp = lancamentos.filter(l=>l.tipo==='Despesa').reduce((s,l)=>s+l.valor, 0);\nconst tot_rec  = lancamentos.filter(l=>l.tipo==='Receita').reduce((s,l)=>s+l.valor, 0);\n\nconst por_cat = {};\nlancamentos.forEach(l => {\n  if (l.tipo === 'Despesa') por_cat[l.categoria] = (por_cat[l.categoria]||0) + l.valor;\n});\nconst top_cat = Object.entries(por_cat).sort((a,b)=>b[1]-a[1]).slice(0, 3);\n\nconst resumo = `✅ *Fatura processada!*\\n\\n🏦 *${banco}* – ${mes}\\n📊 ${lancamentos.length} lançamentos\\n\\n💸 Despesas: R$ ${tot_desp.toFixed(2).replace('.',',')}\\n💰 Receitas: R$ ${tot_rec.toFixed(2).replace('.',',')}\\n📈 Saldo: R$ ${(tot_rec-tot_desp).toFixed(2).replace('.',',')}\\n\\n🔝 *Top categorias:*\\n${top_cat.map(([c,v])=>`  • ${c}: R$ ${v.toFixed(2).replace('.',',')}`).join('\\n')}\\n\\n_Lançamentos salvos no Google Sheets_ ✓`;\n\nreturn [{ json: { mes, banco, lancamentos, tot_desp, tot_rec, chatId, resumo, qtd: lancamentos.length } }];"
+      },
+      "id": "parsear", "name": "Parsear Lançamentos",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [2360, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return (($input.first().json.lancamentos) || []).map(l => ({ json: l }));"
+      },
+      "id": "split-items", "name": "Dividir por Lançamento",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [2600, 180]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "COLOQUE_O_ID_DO_GOOGLE_SHEETS", "mode": "id" },
+        "sheetName":  { "__rl": true, "value": "={{ $json.mes }}", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Data":         "={{ $json.data }}",
+            "Descrição":    "={{ $json.descricao }}",
+            "Categoria":    "={{ $json.categoria }}",
+            "Tipo":         "={{ $json.tipo }}",
+            "Valor (R$)":   "={{ $json.valor }}",
+            "Forma Pagto":  "={{ $json.forma_pagamento }}",
+            "Cartão":       "={{ $json.cartao }}",
+            "Parcelas":     "={{ $json.parcelas }}",
+            "Observações":  "={{ $json.observacoes }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "google-sheets", "name": "Google Sheets – Inserir",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
+      "position": [2840, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Parsear Lançamentos').first().json.chatId }}",
+        "text": "={{ $('Parsear Lançamentos').first().json.resumo }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "telegram-confirmar", "name": "Telegram – Confirmar",
+      "type": "n8n-nodes-base.telegram", "typeVersion": 1,
+      "position": [2600, 440],
+      "credentials": { "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" } }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger":         { "main": [[{ "node": "Extrair Documento",         "type": "main", "index": 0 }]] },
+    "Extrair Documento":        { "main": [[{ "node": "É um PDF?",                  "type": "main", "index": 0 }]] },
+    "É um PDF?": { "main": [
+      [{ "node": "Obter Info do Arquivo",   "type": "main", "index": 0 }],
+      [{ "node": "Telegram – Avisar Sem PDF", "type": "main", "index": 0 }]
+    ]},
+    "Obter Info do Arquivo":    { "main": [[{ "node": "Montar URL de Download",    "type": "main", "index": 0 }]] },
+    "Montar URL de Download":   { "main": [[{ "node": "Baixar PDF",                "type": "main", "index": 0 }]] },
+    "Baixar PDF":               { "main": [[{ "node": "Extrair Texto do PDF",      "type": "main", "index": 0 }]] },
+    "Extrair Texto do PDF":     { "main": [[{ "node": "Montar Prompt",             "type": "main", "index": 0 }]] },
+    "Montar Prompt":            { "main": [[{ "node": "Claude – Analisar Fatura",  "type": "main", "index": 0 }]] },
+    "Claude – Analisar Fatura": { "main": [[{ "node": "Parsear Lançamentos",       "type": "main", "index": 0 }]] },
+    "Parsear Lançamentos": { "main": [[
+      { "node": "Dividir por Lançamento", "type": "main", "index": 0 },
+      { "node": "Telegram – Confirmar",  "type": "main", "index": 0 }
+    ]]},
+    "Dividir por Lançamento":   { "main": [[{ "node": "Google Sheets – Inserir",   "type": "main", "index": 0 }]] },
+    "Google Sheets – Inserir":  { "main": [[]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "staticData": null, "meta": { "templateCredsSetupCompleted": false }, "pinData": {}
+}
