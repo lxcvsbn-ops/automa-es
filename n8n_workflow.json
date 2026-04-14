@@ -106,23 +106,41 @@
     },
     {
       "parameters": {
-        "jsCode": "// Recebe diretamente o item do 'Parsear' – 1 item por PDF\nconst dados = $input.first().json;\nconst csv   = dados.csv;\nconst mes   = dados.mes;\nconst item  = { json: dados, binary: {} };\nitem.binary.csvFile = await this.helpers.prepareBinaryData(\n  Buffer.from('\\uFEFF' + csv, 'utf-8'),\n  `lancamentos_${(mes||'mes').toLowerCase().replace(/ /g,'_')}.csv`,\n  'text/csv'\n);\nreturn [item];"
+        "aggregate": "aggregateAllItemData",
+        "include": "allFields"
+      },
+      "id": "agregar-pdfs", "name": "Agregar Todos os PDFs",
+      "type": "n8n-nodes-base.aggregate", "typeVersion": 1,
+      "position": [1640, 500],
+      "notes": "Espera todos os PDFs serem processados e junta em 1 item para gerar e-mail consolidado."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recebe 1 item com array 'data' contendo o resultado de cada PDF\nconst pdfs   = ($input.first().json.data || []);\nconst email  = pdfs[0]?.email || '';\n\n// Juntar todos os lançamentos\nconst todos = pdfs.flatMap(p => p.lancamentos || []);\n\n// Totais gerais\nconst tot_desp = todos.filter(l=>l.tipo==='Despesa').reduce((s,l)=>s+l.valor,0);\nconst tot_rec  = todos.filter(l=>l.tipo==='Receita').reduce((s,l)=>s+l.valor,0);\n\n// Agrupar por banco/cartão\nconst por_banco = {};\ntodos.forEach(l => {\n  const b = l.cartao || l.banco || 'Outros';\n  if (!por_banco[b]) por_banco[b] = [];\n  por_banco[b].push(l);\n});\nconst bancos = Object.keys(por_banco).sort();\n\n// CSV consolidado – ordenado por banco\nconst csvH = 'Data,Descrição,Categoria,Tipo,Valor (R$),Forma Pagto,Cartão,Parcelas,Observações';\nconst csvLinhas = [];\nbancos.forEach(banco => {\n  por_banco[banco]\n    .sort((a,b) => (a.data||'').localeCompare(b.data||''))\n    .forEach(l => {\n      csvLinhas.push(`\"${l.data}\",\"${l.descricao}\",\"${l.categoria}\",\"${l.tipo}\",\"${l.valor.toFixed(2).replace('.',',')}\",\"${l.forma_pagamento}\",\"${l.cartao}\",\"${l.parcelas}\",\"${l.observacoes}\"`);\n    });\n});\nconst csv = [csvH, ...csvLinhas].join('\\n');\n\n// HTML do e-mail – seção por banco\nconst coresCard = ['#ede9fe','#dcfce7','#fee2e2','#fef9c3','#e0f2fe','#fce7f3'];\nconst secoes = bancos.map((banco, bi) => {\n  const lans    = por_banco[banco];\n  const desp_b  = lans.filter(l=>l.tipo==='Despesa').reduce((s,l)=>s+l.valor,0);\n  const rec_b   = lans.filter(l=>l.tipo==='Receita').reduce((s,l)=>s+l.valor,0);\n  const cor     = coresCard[bi % coresCard.length];\n  const linhas  = lans.map(l =>\n    `<tr><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0;white-space:nowrap\">${l.data}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0\">${l.descricao}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0\">${l.categoria}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0;color:${l.tipo==='Receita'?'#16a34a':'#dc2626'}\">${l.tipo}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600\">R$ ${l.valor.toFixed(2).replace('.',',')}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0\">${l.forma_pagamento}</td></tr>`\n  ).join('');\n  return `<div style=\"background:${cor};border-radius:10px;padding:16px;margin-bottom:20px\">\n    <div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:10px\">\n      <h2 style=\"margin:0;font-size:16px;color:#1e1e2e\">${banco}</h2>\n      <span style=\"font-size:13px;color:#555\">${lans.length} lançamentos &nbsp;|&nbsp; <strong style=\"color:#dc2626\">R$ ${desp_b.toFixed(2).replace('.',',')}</strong></span>\n    </div>\n    <table style=\"width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:6px;overflow:hidden\">\n      <thead><tr style=\"background:#1e1e2e;color:#fff\">\n        <th style=\"padding:6px 8px;text-align:left\">Data</th>\n        <th style=\"padding:6px 8px;text-align:left\">Descrição</th>\n        <th style=\"padding:6px 8px;text-align:left\">Categoria</th>\n        <th style=\"padding:6px 8px;text-align:left\">Tipo</th>\n        <th style=\"padding:6px 8px;text-align:right\">Valor</th>\n        <th style=\"padding:6px 8px;text-align:left\">Forma</th>\n      </tr></thead>\n      <tbody>${linhas}</tbody>\n    </table>\n  </div>`;\n}).join('');\n\nconst html = `<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head>\n<body style=\"font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#1e1e2e\">\n  <div style=\"background:#1e1e2e;color:#fff;padding:24px;border-radius:12px;margin-bottom:20px\">\n    <h1 style=\"margin:0 0 4px\">Controle Financeiro</h1>\n    <p style=\"margin:0;color:#a0a0c0\">${bancos.length} faturas processadas &nbsp;·&nbsp; ${todos.length} lançamentos no total</p>\n  </div>\n  <div style=\"display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap\">\n    <div style=\"flex:1;min-width:140px;background:#dcfce7;border-radius:8px;padding:14px\"><div style=\"font-size:11px;color:#166534;font-weight:600\">RECEITAS TOTAL</div><div style=\"font-size:20px;font-weight:700;color:#16a34a\">R$ ${tot_rec.toFixed(2).replace('.',',')}</div></div>\n    <div style=\"flex:1;min-width:140px;background:#fee2e2;border-radius:8px;padding:14px\"><div style=\"font-size:11px;color:#991b1b;font-weight:600\">DESPESAS TOTAL</div><div style=\"font-size:20px;font-weight:700;color:#dc2626\">R$ ${tot_desp.toFixed(2).replace('.',',')}</div></div>\n    <div style=\"flex:1;min-width:140px;background:#ede9fe;border-radius:8px;padding:14px\"><div style=\"font-size:11px;color:#5b21b6;font-weight:600\">SALDO TOTAL</div><div style=\"font-size:20px;font-weight:700;color:#7c3aed\">R$ ${(tot_rec-tot_desp).toFixed(2).replace('.',',')}</div></div>\n    <div style=\"flex:1;min-width:140px;background:#fef9c3;border-radius:8px;padding:14px\"><div style=\"font-size:11px;color:#854d0e;font-weight:600\">FATURAS</div><div style=\"font-size:20px;font-weight:700;color:#ca8a04\">${bancos.length}</div></div>\n  </div>\n  <p style=\"font-size:12px;color:#666;margin-bottom:16px\">📎 CSV em anexo com todos os lançamentos ordenados por banco — abra no Excel e cole nas abas dos meses.</p>\n  ${secoes}\n  <p style=\"margin-top:20px;font-size:11px;color:#999\">Gerado automaticamente · Revise antes de usar.</p>\n</body></html>`;\n\nreturn [{ json: { email, html, csv, tot_desp, tot_rec, qtd: todos.length, bancos } }];"
+      },
+      "id": "montar-email-consolidado", "name": "Montar E-mail Consolidado",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1880, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "const dados = $input.first().json;\nconst item  = { json: dados, binary: {} };\nitem.binary.csvFile = await this.helpers.prepareBinaryData(\n  Buffer.from('\\uFEFF' + dados.csv, 'utf-8'),\n  `lancamentos_consolidado.csv`,\n  'text/csv'\n);\nreturn [item];"
       },
       "id": "prep-csv", "name": "Preparar CSV",
       "type": "n8n-nodes-base.code", "typeVersion": 2,
-      "position": [1640, 500]
+      "position": [2120, 500]
     },
     {
       "parameters": {
         "sendTo":    "={{ $json.email }}",
-        "subject":   "={{ '✅ ' + $json.banco + ' – ' + $json.qtd + ' lançamentos · ' + $json.mes }}",
+        "subject":   "={{ '✅ ' + $json.bancos.join(' · ') + ' – ' + $json.qtd + ' lançamentos' }}",
         "emailType": "html",
         "message":   "={{ $json.html }}",
         "options": { "attachmentsUi": { "attachmentsBinary": [{ "property": "csvFile" }] } }
       },
       "id": "email", "name": "Enviar E-mail",
       "type": "n8n-nodes-base.gmail", "typeVersion": 2,
-      "position": [1880, 500],
+      "position": [2360, 500],
       "credentials": { "gmailOAuth2": { "id": "GMAIL_CREDENTIAL_ID", "name": "Gmail" } }
     },
     {
@@ -130,12 +148,12 @@
         "method": "POST",
         "url": "={{ $vars.N8N_WEBHOOK_URL_ALERTAS || 'https://SEU_N8N/webhook/verificar-alertas' }}",
         "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ mes: $json.mes }) }}"
+        "jsonBody": "={{ JSON.stringify({ mes: ($input.first().json.bancos||[]).join(',') }) }}"
       },
       "id": "trigger-alertas", "name": "Disparar Verificação de Alertas",
       "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
-      "position": [2120, 500],
-      "notes": "Chama o workflow de alertas de orçamento após cada importação. Configure a URL do webhook do workflow n8n_alertas_orcamento."
+      "position": [2360, 360],
+      "notes": "Chama o workflow de alertas após importação."
     }
   ],
   "connections": {
@@ -145,11 +163,13 @@
     "Montar Prompt":                          { "main": [[{ "node": "Claude – Analisar Fatura",           "type": "main", "index": 0 }]] },
     "Claude – Analisar Fatura": { "main": [[{ "node": "Parsear Lançamentos", "type": "main", "index": 0 }]] },
     "Parsear Lançamentos": { "main": [[
-      { "node": "Dividir por Lançamento", "type": "main", "index": 0 },
-      { "node": "Preparar CSV",           "type": "main", "index": 0 }
+      { "node": "Dividir por Lançamento",   "type": "main", "index": 0 },
+      { "node": "Agregar Todos os PDFs",    "type": "main", "index": 0 }
     ]]},
-    "Dividir por Lançamento":  { "main": [[{ "node": "Google Sheets – Inserir", "type": "main", "index": 0 }]] },
-    "Google Sheets – Inserir": { "main": [[]] },
+    "Dividir por Lançamento":       { "main": [[{ "node": "Google Sheets – Inserir",      "type": "main", "index": 0 }]] },
+    "Google Sheets – Inserir":      { "main": [[]] },
+    "Agregar Todos os PDFs":        { "main": [[{ "node": "Montar E-mail Consolidado",     "type": "main", "index": 0 }]] },
+    "Montar E-mail Consolidado":    { "main": [[{ "node": "Preparar CSV",                  "type": "main", "index": 0 }]] },
     "Preparar CSV": { "main": [[
       { "node": "Enviar E-mail",                   "type": "main", "index": 0 },
       { "node": "Disparar Verificação de Alertas", "type": "main", "index": 0 }
