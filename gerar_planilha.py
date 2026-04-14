@@ -10,8 +10,9 @@ Gera controle_financeiro_2025.xlsx com:
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter, column_index_from_string
-from openpyxl.chart import BarChart, Reference
+from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.formatting.rule import FormulaRule
 import os
 
 # ── Paleta ───────────────────────────────────────────────────────────────────
@@ -198,8 +199,46 @@ def criar_aba_mes(wb, nome_mes, mes_num):
     # Área de resumo por categoria (colunas K-M) + gráfico
     _adicionar_resumo_e_grafico(ws, nome_mes)
 
+    # Cores por banco na coluna Cartão (G)
+    _aplicar_cores_bancos(ws)
+
     ws.freeze_panes = "A6"
     return ws
+
+
+def _aplicar_cores_bancos(ws):
+    """Formatação condicional: pinta a célula da coluna Cartão com a cor do banco."""
+    # Texto branco em todos os casos
+    font_branco = Font(color="FFFFFF", bold=True, name="Segoe UI", size=10)
+    # Ordem importa: bancos com nomes mais específicos primeiro
+    bancos_ordenados = [
+        ("c6",        "242424"),
+        ("btg",       "1E3A5F"),
+        ("xp",        "1F1F1F"),
+        ("nubank",    "6A0DAD"),
+        ("bradesco",  "CC092F"),
+        ("santander", "EC0000"),
+        ("sicoob",    "00713E"),
+        ("sicredi",   "007A3D"),
+        ("picpay",    "21C25E"),
+        ("next",      "00B300"),
+        ("inter",     "FF7A00"),
+        ("caixa",     "005CA9"),
+        ("itaú",      "E86213"),
+        ("itau",      "E86213"),
+    ]
+    col_cartao = LINHA_DADOS  # primeira linha de dados (usada como âncora na fórmula)
+    faixa = f"G{LINHA_DADOS}:G2000"
+    for banco_key, hex_color in bancos_ordenados:
+        # SEARCH é case-insensitive; a fórmula é relativa à primeira célula da faixa
+        formula = [f'=ISNUMBER(SEARCH("{banco_key}",G{LINHA_DADOS}))']
+        rule = FormulaRule(
+            formula=formula,
+            fill=PatternFill("solid", fgColor=hex_color),
+            font=font_branco,
+            stopIfTrue=False,
+        )
+        ws.conditional_formatting.add(faixa, rule)
 
 
 def _adicionar_resumo_e_grafico(ws, nome_mes):
@@ -537,6 +576,40 @@ def criar_dashboard(wb):
                  color=cor, bg=C_BG_HEADER, h_align="right" if ci > 2 else "left",
                  fmt=fmt_t)
     ws.row_dimensions[ri_tot].height = 22
+
+    # ── Gráfico de torres: Receitas vs Despesas por mês ──
+    # (linhas tbl_row+2 .. ri_tot-1 contêm Mês, Receitas, Despesas, Saldo, Economia%)
+    ev_row_ini = tbl_row + 2
+    ev_row_fim = ri_tot - 1  # exclui a linha TOTAL
+
+    chart_mensal = BarChart()
+    chart_mensal.type      = "col"
+    chart_mensal.grouping  = "clustered"
+    chart_mensal.title     = "Receitas vs Despesas por Mês"
+    chart_mensal.y_axis.title = "R$"
+    chart_mensal.style     = 2
+    chart_mensal.width     = 30
+    chart_mensal.height    = 14
+
+    meses_ref  = Reference(ws, min_col=2, min_row=ev_row_ini, max_row=ev_row_fim)
+    rec_ref    = Reference(ws, min_col=3, min_row=ev_row_ini - 1, max_row=ev_row_fim)
+    dep_ref    = Reference(ws, min_col=4, min_row=ev_row_ini - 1, max_row=ev_row_fim)
+    saldo_ref2 = Reference(ws, min_col=5, min_row=ev_row_ini - 1, max_row=ev_row_fim)
+
+    chart_mensal.add_data(rec_ref,    titles_from_data=True)
+    chart_mensal.add_data(dep_ref,    titles_from_data=True)
+    chart_mensal.add_data(saldo_ref2, titles_from_data=True)
+    chart_mensal.set_categories(meses_ref)
+
+    chart_mensal.series[0].graphicalProperties.solidFill = "6BCB77"   # Receitas – verde
+    chart_mensal.series[0].graphicalProperties.line.solidFill = "6BCB77"
+    chart_mensal.series[1].graphicalProperties.solidFill = "F75C8D"   # Despesas – rosa
+    chart_mensal.series[1].graphicalProperties.line.solidFill = "F75C8D"
+    chart_mensal.series[2].graphicalProperties.solidFill = "7C6AF7"   # Saldo – roxo
+    chart_mensal.series[2].graphicalProperties.line.solidFill = "7C6AF7"
+
+    chart_anchor = f"B{ri_tot + 2}"
+    ws.add_chart(chart_mensal, chart_anchor)
 
     ws.freeze_panes = "B6"
     return ws
