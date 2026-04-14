@@ -1,0 +1,174 @@
+{
+  "name": "Controle Financeiro – WhatsApp PDF",
+  "_instrucoes": {
+    "descricao": "Recebe PDFs de faturas enviados via WhatsApp e processa automaticamente.",
+    "whatsapp_api": "Use Z-API (z-api.io) ou Evolution API. Configure o webhook para apontar para este N8N.",
+    "configurar": [
+      "1. No Z-API/Evolution: configure o webhook para https://SEU_N8N/webhook/whatsapp-fatura",
+      "2. O webhook deve enviar o payload quando receber mensagens com arquivo",
+      "3. Configure as credenciais: Anthropic (Header Auth), Google Sheets, Z-API (Header Auth)",
+      "4. Preencha ZAPI_INSTANCE_ID e ZAPI_TOKEN nos nós de WhatsApp",
+      "5. Coloque seu número no campo NUMERO_DESTINO_WHATSAPP ou use o número remetente do webhook"
+    ],
+    "zapi_enviar_url": "POST https://api.z-api.io/instances/{INSTANCE_ID}/token/{TOKEN}/send-text",
+    "zapi_enviar_body": "{ \"phone\": \"5511999999999\", \"message\": \"texto\" }",
+    "evolution_enviar_url": "POST https://SEU_EVOLUTION/message/sendText/{INSTANCE}",
+    "evolution_enviar_body": "{ \"number\": \"5511999999999@s.whatsapp.net\", \"text\": \"texto\" }"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-fatura",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "wpp-webhook", "name": "Webhook – WhatsApp",
+      "type": "n8n-nodes-base.webhook", "typeVersion": 1,
+      "position": [200, 300],
+      "notes": "Configure este URL no webhook do Z-API ou Evolution API."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrai o arquivo PDF do payload do WhatsApp\n// Suporta Z-API e Evolution API\nconst body = $input.first().json.body || $input.first().json;\n\n// Z-API format\nconst zapiFile = body?.message?.documentMessage || body?.message?.imageMessage;\n// Evolution format  \nconst evolutionFile = body?.data?.message?.documentMessage || body?.data?.message?.audioMessage;\n\nconst fileData = zapiFile || evolutionFile;\nconst senderPhone = body?.phone || body?.data?.key?.remoteJid?.replace('@s.whatsapp.net','') || '';\nconst fileName    = fileData?.fileName || fileData?.title || 'fatura.pdf';\nconst fileUrl     = fileData?.url || fileData?.directPath || '';\nconst mimetype    = fileData?.mimetype || '';\nconst caption     = body?.text || body?.caption || body?.data?.message?.conversation || '';\n\nif (!fileUrl && !mimetype.includes('pdf')) {\n  return [{ json: { ignorar: true, motivo: 'Mensagem sem PDF', phone: senderPhone } }];\n}\n\n// Extrair mês do caption se informado (ex: \"Abril\" ou \"abril\")\nconst mesesMap = { 'janeiro':'Janeiro','fevereiro':'Fevereiro','março':'Março','marco':'Março','abril':'Abril','maio':'Maio','junho':'Junho','julho':'Julho','agosto':'Agosto','setembro':'Setembro','outubro':'Outubro','novembro':'Novembro','dezembro':'Dezembro' };\nconst captionLower = caption.toLowerCase();\nconst mesCaption = Object.entries(mesesMap).find(([k]) => captionLower.includes(k))?.[1] || '';\n\nreturn [{ json: { fileUrl, fileName, senderPhone, mesCaption, mimetype, caption, ignorar: false } }];"
+      },
+      "id": "extrair-payload", "name": "Extrair Payload WhatsApp",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{ "value1": "={{ $json.ignorar }}", "value2": false }]
+        }
+      },
+      "id": "check-pdf", "name": "É um PDF?",
+      "type": "n8n-nodes-base.if", "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.z-api.io/instances/ZAPI_INSTANCE_ID/token/ZAPI_TOKEN/send-text",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.senderPhone, message: '❌ Mensagem sem PDF. Por favor, envie o arquivo PDF da fatura.' }) }}"
+      },
+      "id": "wpp-sem-pdf", "name": "WhatsApp – Avisar Sem PDF",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [920, 460],
+      "notes": "Substitua ZAPI_INSTANCE_ID e ZAPI_TOKEN pelos seus valores do Z-API."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.fileUrl }}",
+        "options": { "response": { "response": { "responseFormat": "file" } } }
+      },
+      "id": "baixar-pdf", "name": "Baixar PDF",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [920, 300]
+    },
+    {
+      "parameters": { "operation": "pdf", "binaryPropertyName": "data", "options": {} },
+      "id": "extrair-texto", "name": "Extrair Texto do PDF",
+      "type": "n8n-nodes-base.extractFromFile", "typeVersion": 1,
+      "position": [1160, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const texto      = $input.first().json.text || '';\nconst payload    = $('Extrair Payload WhatsApp').first().json;\nconst phone      = payload.senderPhone;\nconst mesCaption = payload.mesCaption || '';\n\nconst prompt = `Você é especialista em faturas bancárias brasileiras.\n\nAnalise a fatura e extraia TODOS os lançamentos. Identifique também o banco/cartão de origem.\n\nRetorne SOMENTE JSON puro (sem markdown):\n{\"mes\":\"NomeDoMes\",\"banco\":\"NomeDoBanco\",\"periodo\":\"DD/MM/AAAA a DD/MM/AAAA\",\"total_despesas\":0.00,\"total_receitas\":0.00,\"lancamentos\":[{\"data\":\"DD/MM/AAAA\",\"descricao\":\"Nome max 50\",\"categoria\":\"Alimentação|Moradia|Transporte|Saúde|Educação|Lazer|Vestuário|Assinaturas|Investimentos|Outros\",\"tipo\":\"Despesa|Receita\",\"valor\":0.00,\"forma_pagamento\":\"Crédito|Débito|Pix|Dinheiro|Boleto|Transferência\",\"cartao\":\"NomeDoBanco\",\"parcelas\":1,\"observacoes\":\"\"}]}\n\nRegras: Ignore total, pagamento mínimo, saldo anterior, encargos, IOF. Estornos = Receita. campo cartao = mesmo que banco.\n\nTexto da fatura:\\n${texto}`;\n\nreturn [{ json: { model: 'claude-opus-4-6', max_tokens: 8000, messages: [{ role: 'user', content: prompt }], _phone: phone, _mesCaption: mesCaption } }];"
+      },
+      "id": "montar-prompt-wpp", "name": "Montar Prompt",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "anthropic-version", "value": "2023-06-01" },
+          { "name": "content-type",      "value": "application/json" }
+        ]},
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, max_tokens: $json.max_tokens, messages: $json.messages }) }}"
+      },
+      "id": "claude-wpp", "name": "Claude – Analisar Fatura",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [1640, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HEADER_AUTH_ID", "name": "Anthropic x-api-key" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resposta    = $input.first().json.content?.[0]?.text || '';\nconst promptNode  = $('Montar Prompt').first().json;\nconst phone       = promptNode._phone;\nconst mesCaption  = promptNode._mesCaption;\n\nlet dados;\ntry {\n  const m = resposta.match(/\\{[\\s\\S]*\\}/);\n  if (!m) throw new Error('JSON não encontrado');\n  dados = JSON.parse(m[0]);\n} catch(e) {\n  return [{ json: { erro: true, msg: e.message, phone } }];\n}\n\nconst mMap = { 'janeiro':'Janeiro','fevereiro':'Fevereiro','março':'Março','marco':'Março','abril':'Abril','maio':'Maio','junho':'Junho','julho':'Julho','agosto':'Agosto','setembro':'Setembro','outubro':'Outubro','novembro':'Novembro','dezembro':'Dezembro' };\nconst mes   = mesCaption || mMap[(dados.mes||'').toLowerCase().trim()] || dados.mes || 'Indefinido';\nconst banco = dados.banco || 'N/A';\n\nconst lancamentos = (dados.lancamentos||[]).map(l => ({\n  mes, banco,\n  data:            l.data||'',\n  descricao:       (l.descricao||'').substring(0,50),\n  categoria:       l.categoria||'Outros',\n  tipo:            l.tipo||'Despesa',\n  valor:           parseFloat(l.valor)||0,\n  forma_pagamento: l.forma_pagamento||'',\n  cartao:          l.cartao||banco,\n  parcelas:        parseInt(l.parcelas)||1,\n  observacoes:     l.observacoes||''\n}));\n\nconst tot_desp = lancamentos.filter(l=>l.tipo==='Despesa').reduce((s,l)=>s+l.valor,0);\nconst tot_rec  = lancamentos.filter(l=>l.tipo==='Receita').reduce((s,l)=>s+l.valor,0);\n\nconst por_cat = {};\nlancamentos.forEach(l=>{ if(l.tipo==='Despesa') por_cat[l.categoria]=(por_cat[l.categoria]||0)+l.valor; });\nconst top_cat = Object.entries(por_cat).sort((a,b)=>b[1]-a[1]).slice(0,3);\n\nconst resumo_wpp = `✅ *Fatura processada!*\\n\\n🏦 *${banco}* – ${mes}\\n📊 ${lancamentos.length} lançamentos\\n\\n💸 Despesas: R$ ${tot_desp.toFixed(2).replace('.',',')}\\n💰 Receitas: R$ ${tot_rec.toFixed(2).replace('.',',')}\\n📈 Saldo: R$ ${(tot_rec-tot_desp).toFixed(2).replace('.',',')}\\n\\n🔝 *Top categorias:*\\n${top_cat.map(([c,v])=>`  • ${c}: R$ ${v.toFixed(2).replace('.',',')}`).join('\\n')}\\n\\n_Lançamentos salvos no Google Sheets automaticamente_ ✓`;\n\nreturn [{ json: { mes, banco, lancamentos, tot_desp, tot_rec, phone, resumo_wpp } }];"
+      },
+      "id": "parsear-wpp", "name": "Parsear Lançamentos",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1880, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return ($input.first().json.lancamentos||[]).map(l=>({ json: l }));"
+      },
+      "id": "split-wpp", "name": "Dividir por Lançamento",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [2120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "COLOQUE_O_ID_DO_GOOGLE_SHEETS", "mode": "id" },
+        "sheetName":  { "__rl": true, "value": "={{ $json.mes }}", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Data":         "={{ $json.data }}",
+            "Descrição":    "={{ $json.descricao }}",
+            "Categoria":    "={{ $json.categoria }}",
+            "Tipo":         "={{ $json.tipo }}",
+            "Valor (R$)":   "={{ $json.valor }}",
+            "Forma Pagto":  "={{ $json.forma_pagamento }}",
+            "Cartão":       "={{ $json.cartao }}",
+            "Parcelas":     "={{ $json.parcelas }}",
+            "Observações":  "={{ $json.observacoes }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "sheets-wpp", "name": "Google Sheets – Inserir",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
+      "position": [2360, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.z-api.io/instances/ZAPI_INSTANCE_ID/token/ZAPI_TOKEN/send-text",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $('Parsear Lançamentos').first().json.phone, message: $('Parsear Lançamentos').first().json.resumo_wpp }) }}"
+      },
+      "id": "wpp-confirmacao", "name": "WhatsApp – Confirmar Importação",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [2600, 300],
+      "notes": "Substitua ZAPI_INSTANCE_ID e ZAPI_TOKEN pelos seus valores reais do Z-API."
+    }
+  ],
+  "connections": {
+    "Webhook – WhatsApp":         { "main": [[{ "node": "Extrair Payload WhatsApp", "type": "main", "index": 0 }]] },
+    "Extrair Payload WhatsApp":   { "main": [[{ "node": "É um PDF?",                "type": "main", "index": 0 }]] },
+    "É um PDF?": { "main": [
+      [{ "node": "Baixar PDF",              "type": "main", "index": 0 }],
+      [{ "node": "WhatsApp – Avisar Sem PDF","type": "main", "index": 0 }]
+    ]},
+    "Baixar PDF":                 { "main": [[{ "node": "Extrair Texto do PDF",    "type": "main", "index": 0 }]] },
+    "Extrair Texto do PDF":       { "main": [[{ "node": "Montar Prompt",           "type": "main", "index": 0 }]] },
+    "Montar Prompt":              { "main": [[{ "node": "Claude – Analisar Fatura","type": "main", "index": 0 }]] },
+    "Claude – Analisar Fatura":   { "main": [[{ "node": "Parsear Lançamentos",     "type": "main", "index": 0 }]] },
+    "Parsear Lançamentos":        { "main": [[{ "node": "Dividir por Lançamento",  "type": "main", "index": 0 }]] },
+    "Dividir por Lançamento":     { "main": [[{ "node": "Google Sheets – Inserir", "type": "main", "index": 0 }]] },
+    "Google Sheets – Inserir":    { "main": [[{ "node": "WhatsApp – Confirmar Importação", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "staticData": null, "meta": { "templateCredsSetupCompleted": false }, "pinData": {}
+}

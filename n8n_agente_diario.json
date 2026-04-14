@@ -1,0 +1,153 @@
+{
+  "name": "Controle Financeiro – Agente IA Diário",
+  "_instrucoes": {
+    "descricao": "Todo dia às 22h lê os gastos do Google Sheets, analisa com Claude e envia um resumo inteligente no WhatsApp. Usa aba 'Memória do Agente' para acumular contexto ao longo do tempo.",
+    "configurar": [
+      "1. Importar no N8N",
+      "2. Configurar credenciais: Anthropic (Header Auth), Google Sheets, Z-API",
+      "3. Preencher COLOQUE_O_ID_DO_GOOGLE_SHEETS",
+      "4. Preencher ZAPI_INSTANCE_ID, ZAPI_TOKEN e SEU_NUMERO_WHATSAPP",
+      "5. Criar aba 'Memória do Agente' no Google Sheets com colunas: Data, Observação, Tipo",
+      "6. Ativar o workflow – dispara todo dia às 22h automaticamente"
+    ]
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 22 * * *" }] }
+      },
+      "id": "cron", "name": "Cron – 22h Diário",
+      "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determina o mês atual em português\nconst meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];\nconst hoje  = new Date();\nconst mesAtual  = meses[hoje.getMonth()];\nconst diaAtual  = String(hoje.getDate()).padStart(2,'0');\nconst mesNum    = String(hoje.getMonth()+1).padStart(2,'0');\nconst anoAtual  = hoje.getFullYear();\nconst dataHoje  = `${diaAtual}/${mesNum}/${anoAtual}`;\nconst diasMes   = new Date(anoAtual, hoje.getMonth()+1, 0).getDate();\nconst diasRestantes = diasMes - hoje.getDate();\n\nreturn [{ json: { mesAtual, dataHoje, diaAtual: parseInt(diaAtual), diasMes, diasRestantes, anoAtual } }];"
+      },
+      "id": "data-atual", "name": "Obter Data Atual",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "COLOQUE_O_ID_DO_GOOGLE_SHEETS", "mode": "id" },
+        "sheetName":  { "__rl": true, "value": "={{ $json.mesAtual }}", "mode": "name" },
+        "options": {}
+      },
+      "id": "ler-lancamentos", "name": "Ler Lançamentos do Mês",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
+      "position": [680, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "COLOQUE_O_ID_DO_GOOGLE_SHEETS", "mode": "id" },
+        "sheetName":  { "__rl": true, "value": "Orçamento", "mode": "name" },
+        "options": {}
+      },
+      "id": "ler-orcamento", "name": "Ler Orçamentos",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
+      "position": [680, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "COLOQUE_O_ID_DO_GOOGLE_SHEETS", "mode": "id" },
+        "sheetName":  { "__rl": true, "value": "Memória do Agente", "mode": "name" },
+        "options": { "returnAll": false, "limit": 15 }
+      },
+      "id": "ler-memoria", "name": "Ler Memória do Agente",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
+      "position": [680, 460],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lancamentos = $('Ler Lançamentos do Mês').all().map(i=>i.json);\nconst orcamentos  = $('Ler Orçamentos').all().map(i=>i.json);\nconst memorias    = $('Ler Memória do Agente').all().map(i=>i.json);\nconst ctx         = $('Obter Data Atual').first().json;\nconst { mesAtual, dataHoje, diaAtual, diasMes, diasRestantes } = ctx;\n\n// Limites de orçamento\nconst limites = {};\norcamentos.forEach(o => {\n  const cat = o['Categoria']||'';\n  const lim = parseFloat(o['Limite Mensal (R$)']||0);\n  if (cat) limites[cat] = lim;\n});\n\n// Gastos por categoria\nconst gastos = {};\nconst gastos_hoje = {};\nlancamentos.forEach(l => {\n  const tipo = l['Tipo']||'';\n  const cat  = l['Categoria']||'Outros';\n  const val  = parseFloat(l['Valor (R$)']||0);\n  const data = l['Data']||'';\n  if (tipo === 'Despesa') {\n    gastos[cat] = (gastos[cat]||0) + val;\n    if (data === dataHoje) gastos_hoje[cat] = (gastos_hoje[cat]||0) + val;\n  }\n});\n\nconst total_despesas = Object.values(gastos).reduce((s,v)=>s+v,0);\nconst total_hoje     = Object.values(gastos_hoje).reduce((s,v)=>s+v,0);\nconst total_receitas = lancamentos.filter(l=>l['Tipo']==='Receita').reduce((s,l)=>s+parseFloat(l['Valor (R$)']||0),0);\n\n// Projeção para fim do mês\nconst media_diaria   = diaAtual > 0 ? total_despesas / diaAtual : 0;\nconst projecao_mes   = media_diaria * diasMes;\nconst total_orcamento = Object.values(limites).reduce((s,v)=>s+v,0);\n\n// Status por categoria\nconst status_cats = Object.entries(gastos).map(([cat, gasto]) => {\n  const lim = limites[cat] || 0;\n  const pct = lim > 0 ? gasto/lim : null;\n  return { cat, gasto, lim, pct };\n}).sort((a,b)=>b.gasto-a.gasto);\n\n// Memória recente\nconst mem_texto = memorias.slice(-10).map(m=>`[${m['Data']||''}] ${m['Observação']||m['observacao']||''}`).join('\\n') || 'Nenhum histórico anterior.';\n\n// Montar contexto para Claude\nconst contexto = `Você é um assistente financeiro pessoal inteligente e amigável. Analise os dados abaixo e elabore um relatório diário para ser enviado via WhatsApp.\n\n## DATA DE HOJE\n${dataHoje} – ${mesAtual} (dia ${diaAtual} de ${diasMes}, faltam ${diasRestantes} dias)\n\n## GASTOS DE HOJE (${dataHoje})\nTotal: R$ ${total_hoje.toFixed(2).replace('.',',')}\n${Object.entries(gastos_hoje).map(([c,v])=>`  - ${c}: R$ ${v.toFixed(2).replace('.',',')}`).join('\\n') || '  Nenhum gasto registrado hoje.'}\n\n## RESUMO DO MÊS ATÉ AGORA\nTotal despesas: R$ ${total_despesas.toFixed(2).replace('.',',')}\nTotal receitas: R$ ${total_receitas.toFixed(2).replace('.',',')}\nSaldo: R$ ${(total_receitas-total_despesas).toFixed(2).replace('.',',')}\n\n## GASTOS POR CATEGORIA vs ORÇAMENTO\n${status_cats.map(s=>{\n  const pct_str = s.pct !== null ? ` (${(s.pct*100).toFixed(0)}% do limite R$ ${s.lim.toFixed(2).replace('.',',')})` : ' (sem limite definido)';\n  return `  - ${s.cat}: R$ ${s.gasto.toFixed(2).replace('.',',')}${pct_str}`;\n}).join('\\n')}\n\n## PROJEÇÃO\nMédia diária de gastos: R$ ${media_diaria.toFixed(2).replace('.',',')}\nProjeção para fim do mês: R$ ${projecao_mes.toFixed(2).replace('.',',')}\nOrçamento total mensal: R$ ${total_orcamento.toFixed(2).replace('.',',')}\n${projecao_mes > total_orcamento ? '⚠️ PROJEÇÃO ACIMA DO ORÇAMENTO TOTAL' : '✅ Projeção dentro do orçamento'}\n\n## MEMÓRIA / HISTÓRICO DE OBSERVAÇÕES\n${mem_texto}\n\n---\n\nSua resposta deve ser uma mensagem de WhatsApp (use *negrito* e emojis). Inclua:\n1. Saudação e data\n2. Resumo do dia (gastos de hoje)\n3. Como está o mês em relação ao orçamento (use metáforas simples)\n4. Uma ou duas categorias que merecem atenção\n5. Projeção para fim do mês\n6. Um conselho financeiro personalizado baseado nos dados\n7. Uma frase motivacional curta\n\nSeja direto, amigável e use emojis. Máximo 350 palavras.`;\n\nreturn [{ json: { model: 'claude-opus-4-6', max_tokens: 1500, messages: [{ role: 'user', content: contexto }], _ctx: { mesAtual, dataHoje, total_hoje, total_despesas, total_receitas, media_diaria, projecao_mes, status_cats } } }];"
+      },
+      "id": "montar-contexto", "name": "Montar Contexto para Agente",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [920, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "anthropic-version", "value": "2023-06-01" },
+          { "name": "content-type",      "value": "application/json" }
+        ]},
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $json.model, max_tokens: $json.max_tokens, messages: $json.messages }) }}"
+      },
+      "id": "claude-agente", "name": "Claude – Gerar Análise",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [1160, 320],
+      "credentials": { "httpHeaderAuth": { "id": "HEADER_AUTH_ID", "name": "Anthropic x-api-key" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg_claude = $input.first().json.content?.[0]?.text || 'Erro ao gerar análise.';\nconst ctx = $('Montar Contexto para Agente').first().json._ctx;\nreturn [{ json: { mensagem: msg_claude, ...ctx } }];"
+      },
+      "id": "extrair-msg", "name": "Extrair Mensagem",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1400, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.z-api.io/instances/ZAPI_INSTANCE_ID/token/ZAPI_TOKEN/send-text",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: 'SEU_NUMERO_WHATSAPP', message: $json.mensagem }) }}"
+      },
+      "id": "wpp-relatorio", "name": "WhatsApp – Enviar Relatório",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [1640, 320],
+      "notes": "Preencha SEU_NUMERO_WHATSAPP (ex: 5511999999999) e os dados do Z-API."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "COLOQUE_O_ID_DO_GOOGLE_SHEETS", "mode": "id" },
+        "sheetName":  { "__rl": true, "value": "Memória do Agente", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Data":        "={{ $('Obter Data Atual').first().json.dataHoje }}",
+            "Observação":  "={{ 'Relatório diário enviado. Gastos do dia: R$ ' + $json.total_hoje.toFixed(2) + ' | Total mês: R$ ' + $json.total_despesas.toFixed(2) + ' | Projeção: R$ ' + $json.projecao_mes.toFixed(2) }}",
+            "Tipo":        "relatorio_diario"
+          }
+        },
+        "options": {}
+      },
+      "id": "salvar-memoria", "name": "Salvar na Memória",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
+      "position": [1880, 320],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
+    }
+  ],
+  "connections": {
+    "Cron – 22h Diário":           { "main": [[{ "node": "Obter Data Atual", "type": "main", "index": 0 }]] },
+    "Obter Data Atual": { "main": [[
+      { "node": "Ler Lançamentos do Mês",    "type": "main", "index": 0 },
+      { "node": "Ler Orçamentos",            "type": "main", "index": 0 },
+      { "node": "Ler Memória do Agente",     "type": "main", "index": 0 }
+    ]]},
+    "Ler Lançamentos do Mês":  { "main": [[{ "node": "Montar Contexto para Agente", "type": "main", "index": 0 }]] },
+    "Ler Orçamentos":          { "main": [[{ "node": "Montar Contexto para Agente", "type": "main", "index": 0 }]] },
+    "Ler Memória do Agente":   { "main": [[{ "node": "Montar Contexto para Agente", "type": "main", "index": 0 }]] },
+    "Montar Contexto para Agente": { "main": [[{ "node": "Claude – Gerar Análise", "type": "main", "index": 0 }]] },
+    "Claude – Gerar Análise":  { "main": [[{ "node": "Extrair Mensagem",           "type": "main", "index": 0 }]] },
+    "Extrair Mensagem":        { "main": [[
+      { "node": "WhatsApp – Enviar Relatório", "type": "main", "index": 0 },
+      { "node": "Salvar na Memória",           "type": "main", "index": 0 }
+    ]]},
+    "WhatsApp – Enviar Relatório": { "main": [[{ "node": "Salvar na Memória", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "staticData": null, "meta": { "templateCredsSetupCompleted": false }, "pinData": {}
+}
