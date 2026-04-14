@@ -106,11 +106,11 @@
     },
     {
       "parameters": {
-        "jsCode": "const dados = $('Parsear Lançamentos').first().json;\nconst csv   = dados.csv;\nconst mes   = dados.mes;\nconst item  = $input.first();\nitem.binary = item.binary || {};\nitem.binary.csvFile = await this.helpers.prepareBinaryData(\n  Buffer.from('\\uFEFF' + csv, 'utf-8'),\n  `lancamentos_${mes.toLowerCase()}.csv`,\n  'text/csv'\n);\nitem.json = dados;\nreturn [item];"
+        "jsCode": "// Recebe diretamente o item do 'Parsear' – 1 item por PDF\nconst dados = $input.first().json;\nconst csv   = dados.csv;\nconst mes   = dados.mes;\nconst item  = { json: dados, binary: {} };\nitem.binary.csvFile = await this.helpers.prepareBinaryData(\n  Buffer.from('\\uFEFF' + csv, 'utf-8'),\n  `lancamentos_${(mes||'mes').toLowerCase().replace(/ /g,'_')}.csv`,\n  'text/csv'\n);\nreturn [item];"
       },
       "id": "prep-csv", "name": "Preparar CSV",
       "type": "n8n-nodes-base.code", "typeVersion": 2,
-      "position": [1880, 300]
+      "position": [1640, 500]
     },
     {
       "parameters": {
@@ -122,7 +122,7 @@
       },
       "id": "email", "name": "Enviar E-mail",
       "type": "n8n-nodes-base.gmail", "typeVersion": 2,
-      "position": [2120, 300],
+      "position": [1880, 500],
       "credentials": { "gmailOAuth2": { "id": "GMAIL_CREDENTIAL_ID", "name": "Gmail" } }
     },
     {
@@ -130,11 +130,11 @@
         "method": "POST",
         "url": "={{ $vars.N8N_WEBHOOK_URL_ALERTAS || 'https://SEU_N8N/webhook/verificar-alertas' }}",
         "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ mes: $('Parsear Lançamentos').first().json.mes }) }}"
+        "jsonBody": "={{ JSON.stringify({ mes: $json.mes }) }}"
       },
       "id": "trigger-alertas", "name": "Disparar Verificação de Alertas",
       "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
-      "position": [2120, 460],
+      "position": [2120, 500],
       "notes": "Chama o workflow de alertas de orçamento após cada importação. Configure a URL do webhook do workflow n8n_alertas_orcamento."
     }
   ],
@@ -143,14 +143,17 @@
     "Separar PDFs (1 item por arquivo)":      { "main": [[{ "node": "Extrair Texto do PDF",              "type": "main", "index": 0 }]] },
     "Extrair Texto do PDF":                   { "main": [[{ "node": "Montar Prompt",                     "type": "main", "index": 0 }]] },
     "Montar Prompt":                          { "main": [[{ "node": "Claude – Analisar Fatura",           "type": "main", "index": 0 }]] },
-    "Claude – Analisar Fatura":    { "main": [[{ "node": "Parsear Lançamentos",     "type": "main", "index": 0 }]] },
-    "Parsear Lançamentos":         { "main": [[{ "node": "Dividir por Lançamento",  "type": "main", "index": 0 }]] },
-    "Dividir por Lançamento":      { "main": [[{ "node": "Google Sheets – Inserir", "type": "main", "index": 0 }]] },
-    "Google Sheets – Inserir":     { "main": [[{ "node": "Preparar CSV",            "type": "main", "index": 0 }]] },
-    "Preparar CSV":                { "main": [[
-      { "node": "Enviar E-mail",                    "type": "main", "index": 0 },
-      { "node": "Disparar Verificação de Alertas",  "type": "main", "index": 0 }
-    ]] }
+    "Claude – Analisar Fatura": { "main": [[{ "node": "Parsear Lançamentos", "type": "main", "index": 0 }]] },
+    "Parsear Lançamentos": { "main": [[
+      { "node": "Dividir por Lançamento", "type": "main", "index": 0 },
+      { "node": "Preparar CSV",           "type": "main", "index": 0 }
+    ]]},
+    "Dividir por Lançamento":  { "main": [[{ "node": "Google Sheets – Inserir", "type": "main", "index": 0 }]] },
+    "Google Sheets – Inserir": { "main": [[]] },
+    "Preparar CSV": { "main": [[
+      { "node": "Enviar E-mail",                   "type": "main", "index": 0 },
+      { "node": "Disparar Verificação de Alertas", "type": "main", "index": 0 }
+    ]]}
   },
   "settings": { "executionOrder": "v1", "saveManualExecutions": true },
   "staticData": null, "meta": { "templateCredsSetupCompleted": false }, "pinData": {}
