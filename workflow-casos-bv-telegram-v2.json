@@ -177,7 +177,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ID Caso":   "={{ $('CAPTURAR_THREAD_ID').item.json.id_caso }}",
-            "Thread ID": "={{ $('CAPTURAR_THREAD_ID').item.json.thread_id }}"
+            "Thread ID": "={{ $('CAPTURAR_THREAD_ID').item.json.message_id }}"
           },
           "matchingColumns": ["ID Caso"],
           "schema": [

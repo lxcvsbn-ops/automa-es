@@ -98,48 +98,17 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://graph.microsoft.com/v1.0/me/mailFolders/SentItems/messages",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftOutlookOAuth2Api",
-        "sendQueryParameters": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "$filter",
-              "value": "={{ `startsWith(subject,'[SUBIR BV] ${$json.id_caso}')` }}"
-            },
-            {
-              "name": "$select",
-              "value": "id,sentDateTime"
-            },
-            {
-              "name": "$orderby",
-              "value": "sentDateTime desc"
-            },
-            {
-              "name": "$top",
-              "value": "1"
-            }
-          ]
-        },
-        "options": {}
+        "jsCode": "// Usa o Thread ID (Graph message ID) armazenado na planilha diretamente.\n// Isso evita buscar por assunto, que pode retornar o e-mail errado se o caso\n// foi criado mais de uma vez com o mesmo ID durante testes.\nconst d = $input.item.json;\nconst threadId = d.thread_id_ref || d['Thread ID'] || '';\nif (!threadId) {\n  console.log('AVISO: Thread ID nao encontrado. Caso:', d.id_caso);\n  return [];\n}\nconsole.log('Thread ID (message_id) encontrado:', threadId, '| caso:', d.id_caso);\nreturn [{ json: { value: [{ id: threadId }] } }];"
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1500, 300],
       "id": "buscar-email-orig-0001-0002-0003-04",
-      "name": "Buscar Email Original",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "N5oYhQr6IkmOBT8r",
-          "name": "E-mail LucasOperacional"
-        }
-      }
+      "name": "Buscar Email Original"
     },
     {
       "parameters": {
-        "jsCode": "const msgs = $json.value;\nif (!msgs || msgs.length === 0) {\n  console.log('AVISO: Email nao encontrado. Thread ID:', $('Montar Corpo do E-mail').item.json.thread_id_ref);\n  return [];\n}\n\nconst originalId = msgs[0].id;\nconst d = $('Montar Corpo do E-mail').item.json;\n\nconsole.log('Message ID encontrado:', originalId, '| caso:', d.id_caso);\n\nreturn [{\n  json: {\n    ...d,\n    original_message_id: originalId,\n    id_caso:      d.id_caso    || d['ID Caso'] || '',\n    status_atual: d.status_atual || '',\n    reply_body: {\n      message: {\n        body: { contentType: 'Text', content: d.corpo_email },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
+        "jsCode": "const msgs = $json.value;\nif (!msgs || msgs.length === 0) {\n  console.log('AVISO: Email nao encontrado. Thread ID:', $('Montar Corpo do E-mail').item.json.thread_id_ref);\n  return [];\n}\n\nconst originalId = msgs[0].id;\nconst d = $('Montar Corpo do E-mail').item.json;\n\nconsole.log('Message ID encontrado:', originalId, '| caso:', d.id_caso);\n\nreturn [{\n  json: {\n    ...d,\n    original_message_id: originalId,\n    id_caso:      d.id_caso    || d['ID Caso'] || '',\n    status_atual: d.status_atual || '',\n    reply_body: {\n      comment: '',\n      message: {\n        body: { contentType: 'Text', content: d.corpo_email },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -150,7 +119,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://graph.microsoft.com/v1.0/me/messages/' + $json.original_message_id + '/createReply' }}",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/me/messages/' + $json.original_message_id + '/reply' }}",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "microsoftOutlookOAuth2Api",
         "sendBody": true,
@@ -162,8 +131,7 @@
       "typeVersion": 4.2,
       "position": [1940, 300],
       "id": "enviar-resp-thread-0001-0002-0003-04",
-      "name": "Criar Rascunho Follow-up",
-      "alwaysOutputData": true,
+      "name": "Enviar Follow-up",
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "N5oYhQr6IkmOBT8r",
@@ -244,44 +212,13 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://graph.microsoft.com/v1.0/me/mailFolders/SentItems/messages",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftOutlookOAuth2Api",
-        "sendQueryParameters": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "$filter",
-              "value": "={{ `startsWith(subject,'[SUBIR BV] ${$json['ID Caso'] || $json.id_caso}')` }}"
-            },
-            {
-              "name": "$select",
-              "value": "id,sentDateTime"
-            },
-            {
-              "name": "$orderby",
-              "value": "sentDateTime desc"
-            },
-            {
-              "name": "$top",
-              "value": "1"
-            }
-          ]
-        },
-        "options": {}
+        "jsCode": "// Usa o Thread ID (Graph message ID) armazenado na planilha diretamente.\n// Evita busca por assunto que pode retornar o e-mail errado em casos de reteste.\nconst d = $input.item.json;\nconst threadId = d.thread_id_ref || d['Thread ID'] || '';\nif (!threadId) {\n  console.log('AVISO: Thread ID nao encontrado para BV. Caso:', d['ID Caso'] || '');\n  return [];\n}\nconsole.log('Thread ID (message_id) para BV:', threadId, '| caso:', d['ID Caso'] || '');\nreturn [{ json: { value: [{ id: threadId }] } }];"
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1060, 520],
       "id": "buscar-email-bv-0001-0002-0003-04",
-      "name": "Buscar Email BV",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "N5oYhQr6IkmOBT8r",
-          "name": "E-mail LucasOperacional"
-        }
-      }
+      "name": "Buscar Email BV"
     },
     {
       "parameters": {
@@ -405,9 +342,9 @@
       "main": [[{ "node": "Preparar Envio Resposta", "type": "main", "index": 0 }]]
     },
     "Preparar Envio Resposta": {
-      "main": [[{ "node": "Criar Rascunho Follow-up", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Enviar Follow-up", "type": "main", "index": 0 }]]
     },
-    "Criar Rascunho Follow-up": {
+    "Enviar Follow-up": {
       "main": [[{ "node": "Atualizar Status Enviado", "type": "main", "index": 0 }]]
     },
     "Atualizar Status Enviado": {
