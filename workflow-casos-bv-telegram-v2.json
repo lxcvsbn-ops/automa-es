@@ -236,13 +236,74 @@
     },
     {
       "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
+          "mode": "list",
+          "cachedResultName": "CASOS_CRITICOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Página1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID Caso":        "={{ $('CALCULAR_PRAZO_COBRANCA').item.json.id_caso }}",
+            "Invite Enviado": "SIM"
+          },
+          "matchingColumns": ["ID Caso"],
+          "schema": [
+            {
+              "id": "ID Caso",
+              "displayName": "ID Caso",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Invite Enviado",
+              "displayName": "Invite Enviado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2020, -64],
+      "id": "tg-atualizar-invite-0001-0002-0003-04",
+      "name": "Atualizar Invite Enviado",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
+      }
+    },
+    {
+      "parameters": {
         "chatId": "={{ $('CASOS_CRITICOS').item.json.message.chat.id }}",
         "text": "=🚨 Caso crítico registrado\n\nID: {{ $('CAPTURAR_THREAD_ID').item.json.id_caso }}\nEquipe acionada.",
         "additionalFields": { "appendAttribution": false }
       },
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [2020, -64],
+      "position": [2220, -64],
       "id": "720f7e54-3461-44e7-b0ae-1e911cbfb0b3",
       "name": "MENSAGEM CHAMADO ABERTO2",
       "webhookId": "057e9a18-1a88-4451-be7f-ce185dfb62c1",
@@ -284,6 +345,9 @@
       "main": [[{ "node": "CRIAR_EVENTO_COBRANCA",   "type": "main", "index": 0 }]]
     },
     "CRIAR_EVENTO_COBRANCA": {
+      "main": [[{ "node": "Atualizar Invite Enviado", "type": "main", "index": 0 }]]
+    },
+    "Atualizar Invite Enviado": {
       "main": [[{ "node": "MENSAGEM CHAMADO ABERTO2", "type": "main", "index": 0 }]]
     }
   },

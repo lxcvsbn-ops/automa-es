@@ -234,100 +234,6 @@
     },
     {
       "parameters": {
-        "jsCode": "function addBusinessDays(days) {\n  const date = new Date();\n  let added = 0;\n  while (added < days) {\n    date.setDate(date.getDate() + 1);\n    const dow = date.getDay();\n    if (dow !== 0 && dow !== 6) added++;\n  }\n  return date;\n}\n\nconst d        = $input.item.json;\nconst idCaso   = d.id_caso || d['ID Caso'] || '';\nconst cliente  = d['Código Cliente'] || d['Codigo_Cliente'] || '';\nconst emailDest = d['email_destinatario'] || '';\nconst inviteEnviado = (d['Invite Enviado'] || '').trim().toUpperCase();\n\nif (inviteEnviado === 'SIM') {\n  console.log('Invite ja enviado para', idCaso, '- pulando criacao do evento');\n  return [];\n}\n\nconst prazoDate = addBusinessDays(2);\nconst pad = n => String(n).padStart(2, '0');\nconst prazoISO = prazoDate.getFullYear() + '-' + pad(prazoDate.getMonth() + 1) + '-' + pad(prazoDate.getDate());\n\nconsole.log('Evento cobranca D+2 para', idCaso, ':', prazoISO);\n\nconst attendees = [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' }, type: 'required' }];\n\nreturn [{\n  json: {\n    id_caso: idCaso,\n    event_cobranca: {\n      subject: '⏰ Cobrança — ' + idCaso + ' | Cliente ' + cliente,\n      start: { dateTime: prazoISO + 'T09:00:00', timeZone: 'America/Sao_Paulo' },\n      end:   { dateTime: prazoISO + 'T09:30:00', timeZone: 'America/Sao_Paulo' },\n      body: {\n        contentType: 'Text',\n        content: 'Prazo de cobrança (D+2 úteis).\\n\\n⚠️ Se o caso não foi resolvido, escale para a área de líderes de atendimento (BDO).'\n      },\n      attendees: attendees,\n      isReminderOn: true,\n      reminderMinutesBeforeStart: 60\n    }\n  }\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2380, 300],
-      "id": "fu-calc-prazo-0001-0002-0003-04",
-      "name": "Calcular Prazo Cobranca"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://graph.microsoft.com/v1.0/me/events",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftOutlookOAuth2Api",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.event_cobranca) }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2600, 300],
-      "id": "fu-criar-evento-0001-0002-0003-04",
-      "name": "Criar Evento Cobranca",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "N5oYhQr6IkmOBT8r",
-          "name": "E-mail LucasOperacional"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "update",
-        "documentId": {
-          "__rl": true,
-          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
-          "mode": "list",
-          "cachedResultName": "CASOS_CRITICOS",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
-        },
-        "sheetName": {
-          "__rl": true,
-          "value": "gid=0",
-          "mode": "list",
-          "cachedResultName": "Página1",
-          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "ID Caso": "={{ $('Calcular Prazo Cobranca').item.json.id_caso }}",
-            "Invite Enviado": "=SIM"
-          },
-          "matchingColumns": ["ID Caso"],
-          "schema": [
-            {
-              "id": "ID Caso",
-              "displayName": "ID Caso",
-              "required": true,
-              "defaultMatch": true,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": true
-            },
-            {
-              "id": "Invite Enviado",
-              "displayName": "Invite Enviado",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "type": "string",
-              "canBeUsedToMatch": false
-            }
-          ],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
-      "position": [2820, 300],
-      "id": "atualizar-invite-env-0001-0002-03-04",
-      "name": "Atualizar Invite Enviado",
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "iCtWo6EifTat6VhP",
-          "name": "CASOS_CRITICOS"
-        }
-      }
-    },
-    {
-      "parameters": {
         "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\nconst GENEROS = {\n  'rodrigo': 'M', 'lucas': 'M', 'athos': 'M', 'fabio': 'M',\n  'allini': 'F', 'ana': 'F', 'maria': 'F', 'patricia': 'F'\n};\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    if (chave.toLowerCase().includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  // Fallback: busca pelo primeiro nome\n  const primeiroInput = nomeLower.split(' ')[0];\n  if (primeiroInput) {\n    for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n      if (chave.split(' ')[0].toLowerCase() === primeiroInput) return email;\n    }\n  }\n  return '';\n}\n\nconst d = $json;\nconst protoBV    = (d['Protocolo BV'] || '').trim();\nconst bvEnviado  = (d['Protocolo BV Enviado'] || '').trim().toUpperCase();\nconst threadId   = (d['ID da thread'] || d['Thread ID'] || '').trim();\n\nif (!protoBV)              { return []; }\nif (bvEnviado === 'SIM')   { return []; }\nif (!threadId)             { return []; }\n\nconst responsavelRaw = (d['Responsável'] || d['Responsavel'] || '').split('|')[0].trim();\nconst emailNoCampo   = (responsavelRaw.match(/([\\w.+-]+@[\\w.-]+\\.[\\w]+)/) || [])[1] || '';\nconst nomeSemEmail   = responsavelRaw.replace(/[\\w.+-]+@[\\w.-]+\\.[\\w]+/g, '').trim();\nconst emailDest      = emailNoCampo || findEmail(nomeSemEmail);\nif (!emailDest) { return []; }\n\nconst primeiroNome = nomeSemEmail.split(' ')[0] || '';\nconst genero   = GENEROS[primeiroNome.toLowerCase()] || 'M';\nconst saudacao = (genero === 'F' ? 'Prezada' : 'Prezado') + (primeiroNome ? ' ' + primeiroNome : '');\n\nconsole.log('BV protocol detectado:', protoBV, '| destinatario:', emailDest);\n\nreturn [{\n  json: {\n    ...d,\n    thread_id_ref:      threadId,\n    email_destinatario: emailDest,\n    saudacao:           saudacao,\n    protocolo_bv:       protoBV\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
@@ -471,39 +377,6 @@
           "name": "CASOS_CRITICOS"
         }
       }
-    },
-    {
-      "parameters": {
-        "jsCode": "function addBusinessDays(days) {\n  const date = new Date();\n  let added = 0;\n  while (added < days) {\n    date.setDate(date.getDate() + 1);\n    const dow = date.getDay();\n    if (dow !== 0 && dow !== 6) added++;\n  }\n  return date;\n}\n\nconst d       = $input.item.json;\nconst idCaso  = d.id_caso || d['ID Caso'] || '';\nconst cliente = d['Código Cliente'] || d['Codigo_Cliente'] || '';\nconst protoBV = d.protocolo_bv || '';\n\nconst prazoDate = addBusinessDays(2);\nconst pad = n => String(n).padStart(2, '0');\nconst prazoISO = prazoDate.getFullYear() + '-' + pad(prazoDate.getMonth() + 1) + '-' + pad(prazoDate.getDate());\n\nconsole.log('Evento BV D+2 para', idCaso, ':', prazoISO);\n\nreturn [{\n  json: {\n    event_bv: {\n      subject: '🔔 Protocolo BV — ' + idCaso + ' | Cliente ' + cliente,\n      start: { dateTime: prazoISO + 'T09:00:00', timeZone: 'America/Sao_Paulo' },\n      end:   { dateTime: prazoISO + 'T09:30:00', timeZone: 'America/Sao_Paulo' },\n      body: {\n        contentType: 'Text',\n        content: 'Protocolo BV registrado: ' + protoBV + '\\n\\n⚠️ Verifique se o caso foi resolvido. Se não, escale para BDO.'\n      },\n      attendees: [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' }, type: 'required' }],\n      isReminderOn: true,\n      reminderMinutesBeforeStart: 60\n    }\n  }\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1500, 740],
-      "id": "calc-prazo-bv-0001-0002-0003-04",
-      "name": "Calcular Prazo BV"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://graph.microsoft.com/v1.0/me/events",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "microsoftOutlookOAuth2Api",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.event_bv) }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1720, 740],
-      "id": "criar-evento-bv-0001-0002-0003-04",
-      "name": "Criar Evento BV",
-      "credentials": {
-        "microsoftOutlookOAuth2Api": {
-          "id": "N5oYhQr6IkmOBT8r",
-          "name": "E-mail LucasOperacional"
-        }
-      }
     }
   ],
   "connections": {
@@ -532,22 +405,13 @@
       "main": [[{ "node": "Preparar Envio Resposta", "type": "main", "index": 0 }]]
     },
     "Preparar Envio Resposta": {
-      "main": [[
-        { "node": "Criar Rascunho Follow-up", "type": "main", "index": 0 },
-        { "node": "Calcular Prazo Cobranca",  "type": "main", "index": 0 }
-      ]]
+      "main": [[{ "node": "Criar Rascunho Follow-up", "type": "main", "index": 0 }]]
     },
     "Criar Rascunho Follow-up": {
       "main": [[{ "node": "Atualizar Status Enviado", "type": "main", "index": 0 }]]
     },
     "Atualizar Status Enviado": {
       "main": [[]]
-    },
-    "Calcular Prazo Cobranca": {
-      "main": [[{ "node": "Criar Evento Cobranca", "type": "main", "index": 0 }]]
-    },
-    "Criar Evento Cobranca": {
-      "main": [[{ "node": "Atualizar Invite Enviado", "type": "main", "index": 0 }]]
     },
     "VERIFICAR_PROTOCOLO_BV": {
       "main": [[{ "node": "Buscar Email BV", "type": "main", "index": 0 }]]
@@ -556,16 +420,10 @@
       "main": [[{ "node": "Preparar Resposta BV", "type": "main", "index": 0 }]]
     },
     "Preparar Resposta BV": {
-      "main": [[
-        { "node": "Enviar Email BV",    "type": "main", "index": 0 },
-        { "node": "Calcular Prazo BV",  "type": "main", "index": 0 }
-      ]]
+      "main": [[{ "node": "Enviar Email BV", "type": "main", "index": 0 }]]
     },
     "Enviar Email BV": {
       "main": [[{ "node": "Marcar BV Enviado", "type": "main", "index": 0 }]]
-    },
-    "Calcular Prazo BV": {
-      "main": [[{ "node": "Criar Evento BV", "type": "main", "index": 0 }]]
     }
   },
   "settings": {
