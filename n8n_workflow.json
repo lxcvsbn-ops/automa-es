@@ -1,0 +1,179 @@
+{
+  "name": "Controle Financeiro – Formulário PDF",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Importar Fatura PDF",
+        "formDescription": "Envie o PDF da fatura. Os lançamentos serão extraídos pelo Claude e enviados por e-mail + salvos no Google Sheets.",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Fatura PDF",  "fieldType": "file", "acceptFileTypes": ".pdf", "requiredField": true },
+            { "fieldLabel": "Seu e-mail",  "fieldType": "email", "requiredField": true },
+            { "fieldLabel": "Mês (opcional – ex: Abril)", "fieldType": "text", "requiredField": false }
+          ]
+        },
+        "options": {
+          "buttonLabel": "Processar Fatura",
+          "responseText": "✅ Fatura recebida! Processando… Você receberá um e-mail em instantes."
+        }
+      },
+      "id": "form-trigger", "name": "Formulário – Upload",
+      "type": "n8n-nodes-base.formTrigger", "typeVersion": 2,
+      "position": [200, 300], "webhookId": "controle-financeiro-form"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normaliza 1 ou N PDFs em itens individuais com chave binária consistente.\n// Quando o form recebe múltiplos arquivos, as chaves ficam Fatura_PDF_0, Fatura_PDF_1...\n// Este nó cria um item separado por PDF, todos com chave 'pdf_arquivo'.\nconst formJson = $input.first().json;\nconst binary   = $input.first().binary || {};\n\nconst pdfKeys = Object.keys(binary).filter(k => {\n  const b = binary[k];\n  return b && (\n    (b.mimeType  || '').includes('pdf') ||\n    (b.fileExtension || '') === 'pdf'   ||\n    k.toLowerCase().includes('fatura') ||\n    k.toLowerCase().includes('pdf')\n  );\n});\n\nif (pdfKeys.length === 0) {\n  throw new Error('Nenhum arquivo PDF encontrado no upload. Verifique se o arquivo é .pdf.');\n}\n\n// Um item por PDF; chave binária normalizada para 'pdf_arquivo'\nreturn pdfKeys.map((k, idx) => ({\n  json: {\n    ...formJson,\n    _arquivo_nome:   binary[k].fileName || k,\n    _arquivo_index:  idx,\n    _total_arquivos: pdfKeys.length\n  },\n  binary: { pdf_arquivo: binary[k] }\n}));"
+      },
+      "id": "split-pdfs", "name": "Separar PDFs (1 item por arquivo)",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [440, 300],
+      "notes": "Suporta 1 ou múltiplos PDFs no mesmo upload. Cria um item por arquivo com chave binária normalizada."
+    },
+    {
+      "parameters": { "operation": "pdf", "binaryPropertyName": "pdf_arquivo", "options": {} },
+      "id": "extrair-pdf", "name": "Extrair Texto do PDF",
+      "type": "n8n-nodes-base.extractFromFile", "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Processa TODOS os PDFs extraídos (um item por PDF).\n// CORREÇÃO: usa $input.all() para não perder faturas além da primeira.\nreturn $input.all().map(item => {\n  const texto = item.json.text || '';\n  const prompt = `Você é especialista em faturas bancárias brasileiras.\\n\\nAnalise a fatura e extraia TODOS os lançamentos. Identifique também o banco/cartão de origem.\\n\\nRetorne SOMENTE JSON puro (sem markdown):\\n{\\n  \"mes\": \"NomeDoMes\",\\n  \"banco\": \"NomeExatoDoBancoOuCartao\",\\n  \"periodo\": \"DD/MM/AAAA a DD/MM/AAAA\",\\n  \"total_despesas\": 0.00,\\n  \"total_receitas\": 0.00,\\n  \"lancamentos\": [\\n    {\\n      \"data\": \"DD/MM/AAAA\",\\n      \"descricao\": \"Nome limpo max 50 chars\",\\n      \"categoria\": \"Alimentação|Moradia|Transporte|Saúde|Educação|Lazer|Vestuário|Assinaturas|Investimentos|Outros\",\\n      \"tipo\": \"Despesa|Receita\",\\n      \"valor\": 0.00,\\n      \"forma_pagamento\": \"Crédito|Débito|Pix|Dinheiro|Boleto|Transferência\",\\n      \"cartao\": \"NomeExatoDoBanco\",\\n      \"parcelas\": 1,\\n      \"observacoes\": \"\"\\n    }\\n  ]\\n}\\n\\nRegras:\\n- Ignore: total, pagamento mínimo, saldo anterior, encargos, IOF\\n- Estornos/créditos = Receita\\n- campo \"cartao\" = mesmo valor de \"banco\" para todos os lançamentos\\n\\nTexto da fatura:\\n${texto}`;\n\n  return { json: { model: 'claude-opus-4-6', max_tokens: 8000, messages: [{ role: 'user', content: prompt }] } };\n});"
+      },
+      "id": "montar-prompt", "name": "Montar Prompt",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST", "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType", "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "anthropic-version", "value": "2023-06-01" },
+          { "name": "content-type",      "value": "application/json" }
+        ]},
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "claude-http", "name": "Claude – Analisar Fatura",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [1160, 300],
+      "credentials": { "httpHeaderAuth": { "id": "HEADER_AUTH_ID", "name": "Anthropic x-api-key" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Processa TODOS os itens retornados pelo Claude (um por fatura).\n// CORREÇÃO: usa $input.all() para não perder faturas além da primeira.\nconst mesForm = $('Formulário – Upload').first().json['Mês (opcional – ex: Abril)'] || '';\nconst email   = $('Formulário – Upload').first().json['Seu e-mail'] || '';\nconst mMap = {\n  'janeiro':'Janeiro','fevereiro':'Fevereiro','março':'Março','marco':'Março',\n  'abril':'Abril','maio':'Maio','junho':'Junho','julho':'Julho',\n  'agosto':'Agosto','setembro':'Setembro','outubro':'Outubro',\n  'novembro':'Novembro','dezembro':'Dezembro'\n};\n\nreturn $input.all().map(item => {\n  const resposta = item.json.content?.[0]?.text || '';\n  let dados;\n  try {\n    const m = resposta.match(/\\{[\\s\\S]*\\}/);\n    if (!m) throw new Error('JSON não encontrado na resposta do Claude');\n    dados = JSON.parse(m[0]);\n  } catch(e) {\n    return { json: { erro: true, msg: e.message, raw: resposta.substring(0, 300), lancamentos: [], mes: 'Erro', email } };\n  }\n\n  const mes   = mesForm || mMap[(dados.mes||'').toLowerCase().trim()] || dados.mes || 'Indefinido';\n  const banco = dados.banco || 'N/A';\n\n  const lancamentos = (dados.lancamentos||[]).map(l => ({\n    mes, banco,\n    data:            l.data||'',\n    descricao:       (l.descricao||'').substring(0, 50),\n    categoria:       l.categoria||'Outros',\n    tipo:            l.tipo||'Despesa',\n    valor:           parseFloat(l.valor)||0,\n    forma_pagamento: l.forma_pagamento||'',\n    cartao:          l.cartao||banco,\n    parcelas:        parseInt(l.parcelas)||1,\n    observacoes:     l.observacoes||''\n  }));\n\n  const tot_desp = lancamentos.filter(l=>l.tipo==='Despesa').reduce((s,l)=>s+l.valor, 0);\n  const tot_rec  = lancamentos.filter(l=>l.tipo==='Receita').reduce((s,l)=>s+l.valor, 0);\n\n  return { json: { mes, email, banco, lancamentos, tot_desp, tot_rec, qtd: lancamentos.length } };\n});"
+      },
+      "id": "parsear", "name": "Parsear Lançamentos",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Expande TODOS os lançamentos de TODAS as faturas em itens individuais para o Google Sheets.\n// CORREÇÃO: usa $input.all().flatMap() para processar todas as faturas.\nreturn $input.all().flatMap(item =>\n  (item.json.lancamentos || []).map(l => ({ json: l }))\n);"
+      },
+      "id": "split-items", "name": "Dividir por Lançamento",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1640, 180]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "COLOQUE_O_ID_DO_GOOGLE_SHEETS", "mode": "id" },
+        "sheetName":  { "__rl": true, "value": "={{ $json.mes }}", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Data":         "={{ $json.data }}",
+            "Descrição":    "={{ $json.descricao }}",
+            "Categoria":    "={{ $json.categoria }}",
+            "Tipo":         "={{ $json.tipo }}",
+            "Valor (R$)":   "={{ $json.valor }}",
+            "Forma Pagto":  "={{ $json.forma_pagamento }}",
+            "Cartão":       "={{ $json.cartao }}",
+            "Parcelas":     "={{ $json.parcelas }}",
+            "Observações":  "={{ $json.observacoes }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "google-sheets", "name": "Google Sheets – Inserir",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
+      "position": [1880, 180],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "include": "allFields"
+      },
+      "id": "agregar-pdfs", "name": "Agregar Todos os PDFs",
+      "type": "n8n-nodes-base.aggregate", "typeVersion": 1,
+      "position": [1640, 440],
+      "notes": "Espera todos os PDFs serem processados e junta em 1 item para gerar e-mail consolidado."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recebe 1 item com array 'data' contendo o resultado de cada PDF\nconst pdfs   = ($input.first().json.data || []);\nconst email  = pdfs[0]?.email || '';\n\n// Juntar todos os lançamentos\nconst todos = pdfs.flatMap(p => p.lancamentos || []);\n\n// Totais gerais\nconst tot_desp = todos.filter(l=>l.tipo==='Despesa').reduce((s,l)=>s+l.valor,0);\nconst tot_rec  = todos.filter(l=>l.tipo==='Receita').reduce((s,l)=>s+l.valor,0);\n\n// Agrupar por banco/cartão\nconst por_banco = {};\ntodos.forEach(l => {\n  const b = l.cartao || l.banco || 'Outros';\n  if (!por_banco[b]) por_banco[b] = [];\n  por_banco[b].push(l);\n});\nconst bancos = Object.keys(por_banco).sort();\n\n// CSV consolidado – ordenado por banco\nconst csvH = 'Data,Descrição,Categoria,Tipo,Valor (R$),Forma Pagto,Cartão,Parcelas,Observações';\nconst csvLinhas = [];\nbancos.forEach(banco => {\n  por_banco[banco]\n    .sort((a,b) => (a.data||'').localeCompare(b.data||''))\n    .forEach(l => {\n      csvLinhas.push(`\"${l.data}\",\"${l.descricao}\",\"${l.categoria}\",\"${l.tipo}\",\"${l.valor.toFixed(2).replace('.',',')}\",\"${l.forma_pagamento}\",\"${l.cartao}\",\"${l.parcelas}\",\"${l.observacoes}\"`);\n    });\n});\nconst csv = [csvH, ...csvLinhas].join('\\n');\n\n// HTML do e-mail – seção por banco\nconst coresCard = ['#ede9fe','#dcfce7','#fee2e2','#fef9c3','#e0f2fe','#fce7f3'];\nconst secoes = bancos.map((banco, bi) => {\n  const lans   = por_banco[banco];\n  const desp_b = lans.filter(l=>l.tipo==='Despesa').reduce((s,l)=>s+l.valor,0);\n  const cor    = coresCard[bi % coresCard.length];\n  const linhas = lans.map(l =>\n    `<tr><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0;white-space:nowrap\">${l.data}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0\">${l.descricao}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0\">${l.categoria}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0;color:${l.tipo==='Receita'?'#16a34a':'#dc2626'}\">${l.tipo}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600\">R$ ${l.valor.toFixed(2).replace('.',',')}</td><td style=\"padding:4px 8px;border-bottom:1px solid #f0f0f0\">${l.forma_pagamento}</td></tr>`\n  ).join('');\n  return `<div style=\"background:${cor};border-radius:10px;padding:16px;margin-bottom:20px\">\n    <div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:10px\">\n      <h2 style=\"margin:0;font-size:16px;color:#1e1e2e\">${banco}</h2>\n      <span style=\"font-size:13px;color:#555\">${lans.length} lançamentos &nbsp;|&nbsp; <strong style=\"color:#dc2626\">R$ ${desp_b.toFixed(2).replace('.',',')}</strong></span>\n    </div>\n    <table style=\"width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:6px;overflow:hidden\">\n      <thead><tr style=\"background:#1e1e2e;color:#fff\">\n        <th style=\"padding:6px 8px;text-align:left\">Data</th>\n        <th style=\"padding:6px 8px;text-align:left\">Descrição</th>\n        <th style=\"padding:6px 8px;text-align:left\">Categoria</th>\n        <th style=\"padding:6px 8px;text-align:left\">Tipo</th>\n        <th style=\"padding:6px 8px;text-align:right\">Valor</th>\n        <th style=\"padding:6px 8px;text-align:left\">Forma</th>\n      </tr></thead>\n      <tbody>${linhas}</tbody>\n    </table>\n  </div>`;\n}).join('');\n\nconst html = `<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head>\n<body style=\"font-family:Arial,sans-serif;max-width:900px;margin:0 auto;padding:20px;color:#1e1e2e\">\n  <div style=\"background:#1e1e2e;color:#fff;padding:24px;border-radius:12px;margin-bottom:20px\">\n    <h1 style=\"margin:0 0 4px\">Controle Financeiro</h1>\n    <p style=\"margin:0;color:#a0a0c0\">${bancos.length} faturas processadas &nbsp;·&nbsp; ${todos.length} lançamentos no total</p>\n  </div>\n  <div style=\"display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap\">\n    <div style=\"flex:1;min-width:140px;background:#dcfce7;border-radius:8px;padding:14px\"><div style=\"font-size:11px;color:#166534;font-weight:600\">RECEITAS TOTAL</div><div style=\"font-size:20px;font-weight:700;color:#16a34a\">R$ ${tot_rec.toFixed(2).replace('.',',')}</div></div>\n    <div style=\"flex:1;min-width:140px;background:#fee2e2;border-radius:8px;padding:14px\"><div style=\"font-size:11px;color:#991b1b;font-weight:600\">DESPESAS TOTAL</div><div style=\"font-size:20px;font-weight:700;color:#dc2626\">R$ ${tot_desp.toFixed(2).replace('.',',')}</div></div>\n    <div style=\"flex:1;min-width:140px;background:#ede9fe;border-radius:8px;padding:14px\"><div style=\"font-size:11px;color:#5b21b6;font-weight:600\">SALDO TOTAL</div><div style=\"font-size:20px;font-weight:700;color:#7c3aed\">R$ ${(tot_rec-tot_desp).toFixed(2).replace('.',',')}</div></div>\n    <div style=\"flex:1;min-width:140px;background:#fef9c3;border-radius:8px;padding:14px\"><div style=\"font-size:11px;color:#854d0e;font-weight:600\">FATURAS</div><div style=\"font-size:20px;font-weight:700;color:#ca8a04\">${bancos.length}</div></div>\n  </div>\n  <p style=\"font-size:12px;color:#666;margin-bottom:16px\">📎 CSV em anexo com todos os lançamentos ordenados por banco.</p>\n  ${secoes}\n  <p style=\"margin-top:20px;font-size:11px;color:#999\">Gerado automaticamente · Revise antes de usar.</p>\n</body></html>`;\n\nreturn [{ json: { email, html, csv, tot_desp, tot_rec, qtd: todos.length, bancos } }];"
+      },
+      "id": "montar-email-consolidado", "name": "Montar E-mail Consolidado",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1880, 440]
+    },
+    {
+      "parameters": {
+        "jsCode": "const dados = $input.first().json;\nconst item  = { json: dados, binary: {} };\nitem.binary.csvFile = await this.helpers.prepareBinaryData(\n  Buffer.from('\\uFEFF' + dados.csv, 'utf-8'),\n  'lancamentos_consolidado.csv',\n  'text/csv'\n);\nreturn [item];"
+      },
+      "id": "prep-csv", "name": "Preparar CSV",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [2120, 440]
+    },
+    {
+      "parameters": {
+        "sendTo":    "={{ $json.email }}",
+        "subject":   "={{ '✅ ' + $json.bancos.join(' · ') + ' – ' + $json.qtd + ' lançamentos' }}",
+        "emailType": "html",
+        "message":   "={{ $json.html }}",
+        "options": { "attachmentsUi": { "attachmentsBinary": [{ "property": "csvFile" }] } }
+      },
+      "id": "email", "name": "Enviar E-mail",
+      "type": "n8n-nodes-base.gmail", "typeVersion": 2,
+      "position": [2360, 440],
+      "credentials": { "gmailOAuth2": { "id": "GMAIL_CREDENTIAL_ID", "name": "Gmail" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.N8N_WEBHOOK_URL_ALERTAS || 'https://SEU_N8N/webhook/verificar-alertas' }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ mes: ($json.bancos||[]).join(',') }) }}"
+      },
+      "id": "trigger-alertas", "name": "Disparar Verificação de Alertas",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "position": [2360, 320],
+      "notes": "Chama o workflow de alertas após importação. Configure N8N_WEBHOOK_URL_ALERTAS em Settings > Variables."
+    }
+  ],
+  "connections": {
+    "Formulário – Upload":               { "main": [[{ "node": "Separar PDFs (1 item por arquivo)", "type": "main", "index": 0 }]] },
+    "Separar PDFs (1 item por arquivo)": { "main": [[{ "node": "Extrair Texto do PDF",              "type": "main", "index": 0 }]] },
+    "Extrair Texto do PDF":              { "main": [[{ "node": "Montar Prompt",                     "type": "main", "index": 0 }]] },
+    "Montar Prompt":                     { "main": [[{ "node": "Claude – Analisar Fatura",           "type": "main", "index": 0 }]] },
+    "Claude – Analisar Fatura":          { "main": [[{ "node": "Parsear Lançamentos",                "type": "main", "index": 0 }]] },
+    "Parsear Lançamentos": { "main": [[
+      { "node": "Dividir por Lançamento", "type": "main", "index": 0 },
+      { "node": "Agregar Todos os PDFs",  "type": "main", "index": 0 }
+    ]]},
+    "Dividir por Lançamento":     { "main": [[{ "node": "Google Sheets – Inserir",   "type": "main", "index": 0 }]] },
+    "Google Sheets – Inserir":    { "main": [[]] },
+    "Agregar Todos os PDFs":      { "main": [[{ "node": "Montar E-mail Consolidado", "type": "main", "index": 0 }]] },
+    "Montar E-mail Consolidado":  { "main": [[{ "node": "Preparar CSV",              "type": "main", "index": 0 }]] },
+    "Preparar CSV": { "main": [[
+      { "node": "Enviar E-mail",                   "type": "main", "index": 0 },
+      { "node": "Disparar Verificação de Alertas", "type": "main", "index": 0 }
+    ]]}
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "staticData": null, "meta": { "templateCredsSetupCompleted": false }, "pinData": {}
+}
