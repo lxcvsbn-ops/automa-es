@@ -107,7 +107,7 @@
           "parameters": [
             {
               "name": "$filter",
-              "value": "={{ `internetMessageId eq '${$json.thread_id_ref}'` }}"
+              "value": "={{ `startsWith(subject,'[SUBIR BV] ${$json.id_caso}')` }}"
             },
             {
               "name": "$select",
@@ -347,7 +347,7 @@
           "parameters": [
             {
               "name": "$filter",
-              "value": "={{ `internetMessageId eq '${$json.thread_id_ref}'` }}"
+              "value": "={{ `startsWith(subject,'[SUBIR BV] ${$json['ID Caso'] || $json.id_caso}')` }}"
             },
             {
               "name": "$select",
