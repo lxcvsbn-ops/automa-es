@@ -379,7 +379,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const msgs = $json.value;\nif (!msgs || msgs.length === 0) {\n  console.log('AVISO: Email nao encontrado para BV. Thread ID:', $('VERIFICAR_PROTOCOLO_BV').item.json.thread_id_ref);\n  return [];\n}\n\nconst originalId = msgs[0].id;\nconst d = $('VERIFICAR_PROTOCOLO_BV').item.json;\n\nconst saudacao  = d.saudacao  || 'Prezado(a)';\nconst protoBV   = d.protocolo_bv || '';\n\nconst corpo =\n  saudacao + ',\\n\\n' +\n  'Informamos que o protocolo BV do seu caso foi registrado com sucesso. ' +\n  'Nossa equipe segue acompanhando e retornará com atualizações.\\n\\n' +\n  'Protocolo BV: ' + protoBV + '\\n\\n\\n' +\n  'Atenciosamente,';\n\nconsole.log('Preparando e-mail BV para', d.email_destinatario, '| protocolo:', protoBV);\n\nreturn [{\n  json: {\n    original_message_id: originalId,\n    id_caso: d['ID Caso'] || '',\n    reply_body: {\n      comment: '',\n      message: {\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
+        "jsCode": "const msgs = $json.value;\nif (!msgs || msgs.length === 0) {\n  console.log('AVISO: Email nao encontrado para BV. Thread ID:', $('VERIFICAR_PROTOCOLO_BV').item.json.thread_id_ref);\n  return [];\n}\n\nconst originalId = msgs[0].id;\nconst d = $('VERIFICAR_PROTOCOLO_BV').item.json;\n\nconst saudacao  = d.saudacao  || 'Prezado(a)';\nconst protoBV   = d.protocolo_bv || '';\n\nconst corpo =\n  saudacao + ',\\n\\n' +\n  'Informamos que o protocolo BV do seu caso foi registrado com sucesso. ' +\n  'Nossa equipe segue acompanhando e retornará com atualizações.\\n\\n' +\n  'Protocolo BV: ' + protoBV + '\\n\\n\\n' +\n  'Atenciosamente,';\n\nconsole.log('Preparando e-mail BV para', d.email_destinatario, '| protocolo:', protoBV);\n\nreturn [{\n  json: {\n    ...d,\n    original_message_id: originalId,\n    id_caso: d['ID Caso'] || '',\n    protocolo_bv: protoBV,\n    reply_body: {\n      comment: '',\n      message: {\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -471,6 +471,39 @@
           "name": "CASOS_CRITICOS"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "function addBusinessDays(days) {\n  const date = new Date();\n  let added = 0;\n  while (added < days) {\n    date.setDate(date.getDate() + 1);\n    const dow = date.getDay();\n    if (dow !== 0 && dow !== 6) added++;\n  }\n  return date;\n}\n\nconst d       = $input.item.json;\nconst idCaso  = d.id_caso || d['ID Caso'] || '';\nconst cliente = d['Código Cliente'] || d['Codigo_Cliente'] || '';\nconst protoBV = d.protocolo_bv || '';\n\nconst prazoDate = addBusinessDays(2);\nconst pad = n => String(n).padStart(2, '0');\nconst prazoISO = prazoDate.getFullYear() + '-' + pad(prazoDate.getMonth() + 1) + '-' + pad(prazoDate.getDate());\n\nconsole.log('Evento BV D+2 para', idCaso, ':', prazoISO);\n\nreturn [{\n  json: {\n    event_bv: {\n      subject: '🔔 Protocolo BV — ' + idCaso + ' | Cliente ' + cliente,\n      start: { dateTime: prazoISO + 'T09:00:00', timeZone: 'America/Sao_Paulo' },\n      end:   { dateTime: prazoISO + 'T09:30:00', timeZone: 'America/Sao_Paulo' },\n      body: {\n        contentType: 'Text',\n        content: 'Protocolo BV registrado: ' + protoBV + '\\n\\n⚠️ Verifique se o caso foi resolvido. Se não, escale para BDO.'\n      },\n      attendees: [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' }, type: 'required' }],\n      isReminderOn: true,\n      reminderMinutesBeforeStart: 60\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 740],
+      "id": "calc-prazo-bv-0001-0002-0003-04",
+      "name": "Calcular Prazo BV"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.event_bv) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1720, 740],
+      "id": "criar-evento-bv-0001-0002-0003-04",
+      "name": "Criar Evento BV",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
     }
   ],
   "connections": {
@@ -523,10 +556,16 @@
       "main": [[{ "node": "Preparar Resposta BV", "type": "main", "index": 0 }]]
     },
     "Preparar Resposta BV": {
-      "main": [[{ "node": "Enviar Email BV", "type": "main", "index": 0 }]]
+      "main": [[
+        { "node": "Enviar Email BV",    "type": "main", "index": 0 },
+        { "node": "Calcular Prazo BV",  "type": "main", "index": 0 }
+      ]]
     },
     "Enviar Email BV": {
       "main": [[{ "node": "Marcar BV Enviado", "type": "main", "index": 0 }]]
+    },
+    "Calcular Prazo BV": {
+      "main": [[{ "node": "Criar Evento BV", "type": "main", "index": 0 }]]
     }
   },
   "settings": {
