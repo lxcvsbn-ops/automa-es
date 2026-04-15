@@ -1,14 +1,16 @@
 {
   "name": "Controle Financeiro – Agente IA Diário",
   "_instrucoes": {
-    "descricao": "Todo dia às 22h lê os gastos do Google Sheets, analisa com Claude e envia um resumo inteligente no WhatsApp. Usa aba 'Memória do Agente' para acumular contexto ao longo do tempo. O agente tem conhecimento embutido de planejamento financeiro para dar análises de qualidade.",
+    "descricao": "Todo dia às 22h lê os gastos do Google Sheets, analisa com Claude e envia um resumo inteligente via Telegram. Usa aba 'Memória do Agente' para acumular contexto ao longo do tempo.",
     "configurar": [
       "1. Importar no N8N",
-      "2. Configurar credenciais: Anthropic (Header Auth: Name=x-api-key), Google Sheets (OAuth2), Z-API (HTTP Request)",
-      "3. Preencher COLOQUE_O_ID_DO_GOOGLE_SHEETS",
-      "4. Preencher ZAPI_INSTANCE_ID, ZAPI_TOKEN e SEU_NUMERO_WHATSAPP",
-      "5. Criar aba 'Memória do Agente' no Google Sheets com colunas: Data | Observação | Tipo",
-      "6. Ativar o workflow – dispara todo dia às 22h automaticamente"
+      "2. Configurar credencial Telegram API (mesma do workflow principal) — nome: 'Telegram Bot'",
+      "3. Configurar credencial Anthropic (Header Auth: Name=x-api-key, Value=sua-chave)",
+      "4. Configurar credencial Google Sheets OAuth2",
+      "5. Preencher COLOQUE_O_ID_DO_GOOGLE_SHEETS",
+      "6. Preencher SEU_CHAT_ID_TELEGRAM no nó 'Obter Data Atual' — para descobrir o ID: envie qualquer mensagem ao bot e acesse https://api.telegram.org/bot{SEU_TOKEN}/getUpdates, procure 'chat.id'",
+      "7. Criar aba 'Memória do Agente' no Google Sheets com colunas: Data | Observação | Tipo",
+      "8. Ativar o workflow – dispara todo dia às 22h automaticamente"
     ]
   },
   "nodes": [
@@ -22,7 +24,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];\nconst hoje  = new Date();\nconst mesAtual    = meses[hoje.getMonth()];\nconst diaAtual    = String(hoje.getDate()).padStart(2,'0');\nconst mesNum      = String(hoje.getMonth()+1).padStart(2,'0');\nconst anoAtual    = hoje.getFullYear();\nconst dataHoje    = `${diaAtual}/${mesNum}/${anoAtual}`;\nconst diasMes     = new Date(anoAtual, hoje.getMonth()+1, 0).getDate();\nconst diasRestantes = diasMes - hoje.getDate();\nconst diaSemana   = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][hoje.getDay()];\nreturn [{ json: { mesAtual, dataHoje, diaAtual: parseInt(diaAtual), diasMes, diasRestantes, anoAtual, diaSemana } }];"
+        "jsCode": "// ⚠️ CONFIGURE SEU CHAT ID AQUI ⚠️\n// Para descobrir: envie uma mensagem ao bot e acesse\n// https://api.telegram.org/bot{SEU_TOKEN}/getUpdates — procure 'chat.id'\n// Para grupos: o chat_id é negativo (ex: -123456789)\nconst CHAT_ID = 'SEU_CHAT_ID_TELEGRAM';\n\nconst meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];\nconst hoje  = new Date();\nconst mesAtual    = meses[hoje.getMonth()];\nconst diaAtual    = String(hoje.getDate()).padStart(2,'0');\nconst mesNum      = String(hoje.getMonth()+1).padStart(2,'0');\nconst anoAtual    = hoje.getFullYear();\nconst dataHoje    = `${diaAtual}/${mesNum}/${anoAtual}`;\nconst diasMes     = new Date(anoAtual, hoje.getMonth()+1, 0).getDate();\nconst diasRestantes = diasMes - hoje.getDate();\nconst diaSemana   = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][hoje.getDay()];\nreturn [{ json: { mesAtual, dataHoje, diaAtual: parseInt(diaAtual), diasMes, diasRestantes, anoAtual, diaSemana, chatId: CHAT_ID } }];"
       },
       "id": "data-atual", "name": "Obter Data Atual",
       "type": "n8n-nodes-base.code", "typeVersion": 2,
@@ -99,15 +101,15 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.z-api.io/instances/ZAPI_INSTANCE_ID/token/ZAPI_TOKEN/send-text",
-        "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ phone: 'SEU_NUMERO_WHATSAPP', message: $json.mensagem }) }}"
+        "resource": "message", "operation": "sendMessage",
+        "chatId": "={{ $('Obter Data Atual').first().json.chatId }}",
+        "text": "={{ $json.mensagem }}",
+        "additionalFields": { "parse_mode": "Markdown" }
       },
-      "id": "wpp-relatorio", "name": "WhatsApp – Enviar Relatório",
-      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
+      "id": "telegram-relatorio", "name": "Telegram – Enviar Relatório",
+      "type": "n8n-nodes-base.telegram", "typeVersion": 1,
       "position": [1640, 320],
-      "notes": "Preencha SEU_NUMERO_WHATSAPP (ex: 5511999999999) e os dados do Z-API."
+      "credentials": { "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" } }
     },
     {
       "parameters": {
@@ -143,7 +145,7 @@
     "Montar Contexto para Agente": { "main": [[{ "node": "Claude – Gerar Análise", "type": "main", "index": 0 }]] },
     "Claude – Gerar Análise": { "main": [[{ "node": "Extrair Mensagem",            "type": "main", "index": 0 }]] },
     "Extrair Mensagem": { "main": [[
-      { "node": "WhatsApp – Enviar Relatório", "type": "main", "index": 0 },
+      { "node": "Telegram – Enviar Relatório", "type": "main", "index": 0 },
       { "node": "Salvar na Memória",           "type": "main", "index": 0 }
     ]]}
   },

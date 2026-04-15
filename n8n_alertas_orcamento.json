@@ -1,16 +1,14 @@
 {
   "name": "Controle Financeiro – Alertas de Orçamento",
   "_instrucoes": {
-    "descricao": "Verifica gastos vs limites após cada importação. Envia alerta WhatsApp se alguma categoria ultrapassar o orçamento.",
+    "descricao": "Acionado automaticamente após cada importação de fatura. Compara gastos vs limites e envia alerta via Telegram se alguma categoria ultrapassar 80% ou 100% do orçamento.",
     "configurar": [
       "1. Importar no N8N",
-      "2. Configurar Google Sheets credential",
-      "3. Configurar Z-API credentials (ou Evolution API)",
-      "4. Preencher COLOQUE_O_ID_DO_GOOGLE_SHEETS com o ID da sua planilha",
-      "5. Preencher ZAPI_INSTANCE_ID e ZAPI_TOKEN",
-      "6. Preencher SEU_NUMERO_WHATSAPP com seu número (5511999999999)",
-      "7. Ativar o workflow",
-      "8. A URL do webhook vai aparecer no nó 'Webhook – Receber Mês'"
+      "2. Configurar credencial Telegram API (mesma do workflow principal)",
+      "3. Configurar credencial Google Sheets OAuth2",
+      "4. Preencher COLOQUE_O_ID_DO_GOOGLE_SHEETS",
+      "5. Ativar o workflow — a URL do webhook aparece no nó 'Webhook – Receber Trigger'",
+      "6. Copiar a URL do webhook e colar no campo COLOQUE_A_URL_DO_WEBHOOK_DE_ALERTAS do workflow principal"
     ]
   },
   "nodes": [
@@ -21,10 +19,10 @@
         "responseMode": "onReceived",
         "options": {}
       },
-      "id": "webhook-alertas", "name": "Webhook – Receber Mês",
+      "id": "webhook-alertas", "name": "Webhook – Receber Trigger",
       "type": "n8n-nodes-base.webhook", "typeVersion": 1,
       "position": [200, 300],
-      "notes": "Chamado pelo workflow principal após cada importação. Recebe { mes: 'Abril' }."
+      "notes": "Chamado pelo workflow principal após cada importação. Recebe { mes: 'Abril', chatId: '123456' }."
     },
     {
       "parameters": {
@@ -35,7 +33,7 @@
       },
       "id": "ler-mes", "name": "Ler Lançamentos do Mês",
       "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
-      "position": [440, 300],
+      "position": [440, 200],
       "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
     },
     {
@@ -47,16 +45,16 @@
       },
       "id": "ler-orcamento", "name": "Ler Orçamentos",
       "type": "n8n-nodes-base.googleSheets", "typeVersion": 4,
-      "position": [440, 460],
+      "position": [440, 400],
       "credentials": { "googleSheetsOAuth2Api": { "id": "GOOGLE_SHEETS_CREDENTIAL_ID", "name": "Google Sheets" } }
     },
     {
       "parameters": {
-        "jsCode": "const lancamentos = $('Ler Lançamentos do Mês').all().map(i => i.json);\nconst orcamentos  = $('Ler Orçamentos').all().map(i => i.json);\nconst mes         = $('Webhook – Receber Mês').first().json.body?.mes || '';\n\n// Montar mapa de limites: { 'Alimentação': 800, ... }\nconst limites = {};\norcamentos.forEach(o => {\n  const cat    = o['Categoria']     || o['categoria']     || '';\n  const limite = parseFloat(o['Limite Mensal (R$)'] || o['limite_mensal'] || 0);\n  if (cat && limite > 0) limites[cat] = limite;\n});\n\n// Somar gastos por categoria (só Despesas)\nconst gastos = {};\nlancamentos.forEach(l => {\n  if ((l['Tipo']||l['tipo']||'') === 'Despesa') {\n    const cat = l['Categoria']||l['categoria']||'Outros';\n    const val = parseFloat(l['Valor (R$)']||l['valor']||0);\n    gastos[cat] = (gastos[cat]||0) + val;\n  }\n});\n\n// Detectar categorias ultrapassadas ou próximas do limite (>= 80%)\nconst alertas_100 = [];\nconst alertas_80  = [];\n\nObject.entries(gastos).forEach(([cat, gasto]) => {\n  const limite = limites[cat];\n  if (!limite) return;\n  const pct = gasto / limite;\n  if (pct >= 1.0) {\n    alertas_100.push({ cat, gasto, limite, pct });\n  } else if (pct >= 0.8) {\n    alertas_80.push({ cat, gasto, limite, pct });\n  }\n});\n\nif (alertas_100.length === 0 && alertas_80.length === 0) {\n  return [{ json: { enviar: false, mes } }];\n}\n\n// Montar mensagem WhatsApp\nlet msg = `⚠️ *Alerta de Orçamento – ${mes}*\\n\\n`;\n\nif (alertas_100.length > 0) {\n  msg += `🔴 *LIMITE ULTRAPASSADO:*\\n`;\n  alertas_100.forEach(a => {\n    msg += `  • ${a.cat}: R$ ${a.gasto.toFixed(2).replace('.',',')} / R$ ${a.limite.toFixed(2).replace('.',',')} (${(a.pct*100).toFixed(0)}%)\\n`;\n  });\n  msg += '\\n';\n}\n\nif (alertas_80.length > 0) {\n  msg += `🟡 *ATENÇÃO – próximo do limite:*\\n`;\n  alertas_80.forEach(a => {\n    const restante = a.limite - a.gasto;\n    msg += `  • ${a.cat}: R$ ${a.gasto.toFixed(2).replace('.',',')} / R$ ${a.limite.toFixed(2).replace('.',',')} (${(a.pct*100).toFixed(0)}%) – faltam R$ ${restante.toFixed(2).replace('.',',')}\\n`;\n  });\n}\n\nmsg += `\\n_Acesse o Google Sheets para ver o detalhamento._`;\n\nreturn [{ json: { enviar: true, mes, mensagem: msg, alertas_100, alertas_80 } }];"
+        "jsCode": "const lancamentos = $('Ler Lançamentos do Mês').all().map(i => i.json);\nconst orcamentos  = $('Ler Orçamentos').all().map(i => i.json);\nconst mes         = $('Webhook – Receber Trigger').first().json.body?.mes || '';\nconst chatId      = String($('Webhook – Receber Trigger').first().json.body?.chatId || '');\n\n// Mapa de limites\nconst limites = {};\norcamentos.forEach(o => {\n  const cat   = o['Categoria'] || '';\n  const limite = parseFloat(o['Limite Mensal (R$)'] || 0);\n  if (cat && limite > 0) limites[cat] = limite;\n});\n\n// Somar despesas por categoria\nconst gastos = {};\nlancamentos.forEach(l => {\n  if ((l['Tipo']||'') === 'Despesa') {\n    const cat = l['Categoria'] || 'Outros';\n    const val = parseFloat(l['Valor (R$)'] || 0);\n    gastos[cat] = (gastos[cat] || 0) + val;\n  }\n});\n\n// Classificar categorias\nconst alertas_100 = [];\nconst alertas_80  = [];\n\nObject.entries(gastos).forEach(([cat, gasto]) => {\n  const limite = limites[cat];\n  if (!limite) return;\n  const pct = gasto / limite;\n  if (pct >= 1.0) alertas_100.push({ cat, gasto, limite, pct });\n  else if (pct >= 0.8) alertas_80.push({ cat, gasto, limite, pct });\n});\n\nif (alertas_100.length === 0 && alertas_80.length === 0) {\n  return [{ json: { enviar: false, mes, chatId } }];\n}\n\n// Montar mensagem\nlet msg = `⚠️ *Alerta de Orçamento — ${mes}*\\n\\n`;\n\nif (alertas_100.length > 0) {\n  msg += `🔴 *LIMITE ULTRAPASSADO:*\\n`;\n  alertas_100.forEach(a => {\n    const excesso = a.gasto - a.limite;\n    msg += `  • *${a.cat}:* R\\$ ${a.gasto.toFixed(2).replace('.',',')} de R\\$ ${a.limite.toFixed(2).replace('.',',')} \\(${(a.pct*100).toFixed(0)}%\\) — excedeu R\\$ ${excesso.toFixed(2).replace('.',',')}\\n`;\n  });\n  msg += '\\n';\n}\n\nif (alertas_80.length > 0) {\n  msg += `🟡 *ATENÇÃO — próximo do limite:*\\n`;\n  alertas_80.forEach(a => {\n    const restante = a.limite - a.gasto;\n    msg += `  • *${a.cat}:* R\\$ ${a.gasto.toFixed(2).replace('.',',')} de R\\$ ${a.limite.toFixed(2).replace('.',',')} \\(${(a.pct*100).toFixed(0)}%\\) — sobram R\\$ ${restante.toFixed(2).replace('.',',')}\\n`;\n  });\n}\n\nmsg += `\\n_Acesse o Google Sheets para ver o detalhamento\\.`;\n\nreturn [{ json: { enviar: true, mes, chatId, mensagem: msg, alertas_100, alertas_80 } }];"
       },
       "id": "verificar-limites", "name": "Verificar Limites",
       "type": "n8n-nodes-base.code", "typeVersion": 2,
-      "position": [680, 380]
+      "position": [680, 300]
     },
     {
       "parameters": {
@@ -66,23 +64,23 @@
       },
       "id": "check-alerta", "name": "Tem Alerta?",
       "type": "n8n-nodes-base.if", "typeVersion": 1,
-      "position": [920, 380]
+      "position": [920, 300]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.z-api.io/instances/ZAPI_INSTANCE_ID/token/ZAPI_TOKEN/send-text",
-        "sendBody": true, "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ phone: 'SEU_NUMERO_WHATSAPP', message: $json.mensagem }) }}"
+        "resource": "message", "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.mensagem }}",
+        "additionalFields": { "parse_mode": "MarkdownV2" }
       },
-      "id": "wpp-alerta", "name": "WhatsApp – Enviar Alerta",
-      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4,
-      "position": [1160, 300],
-      "notes": "Preencha SEU_NUMERO_WHATSAPP (ex: 5511999999999) e os dados do Z-API."
+      "id": "telegram-alerta", "name": "Telegram – Enviar Alerta",
+      "type": "n8n-nodes-base.telegram", "typeVersion": 1,
+      "position": [1160, 200],
+      "credentials": { "telegramApi": { "id": "TELEGRAM_CREDENTIAL_ID", "name": "Telegram Bot" } }
     }
   ],
   "connections": {
-    "Webhook – Receber Mês": { "main": [[
+    "Webhook – Receber Trigger": { "main": [[
       { "node": "Ler Lançamentos do Mês", "type": "main", "index": 0 },
       { "node": "Ler Orçamentos",         "type": "main", "index": 0 }
     ]]},
@@ -90,7 +88,7 @@
     "Ler Orçamentos":         { "main": [[{ "node": "Verificar Limites", "type": "main", "index": 0 }]] },
     "Verificar Limites":      { "main": [[{ "node": "Tem Alerta?",       "type": "main", "index": 0 }]] },
     "Tem Alerta?": { "main": [
-      [{ "node": "WhatsApp – Enviar Alerta", "type": "main", "index": 0 }],
+      [{ "node": "Telegram – Enviar Alerta", "type": "main", "index": 0 }],
       []
     ]}
   },
