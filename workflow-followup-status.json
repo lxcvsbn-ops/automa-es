@@ -160,7 +160,8 @@
           "mappingMode": "defineBelow",
           "value": {
             "ID Caso": "={{ $('Preparar Envio Resposta').item.json.id_caso }}",
-            "Ultimo Status Enviado": "={{ $('Preparar Envio Resposta').item.json.status_atual }}"
+            "Ultimo Status Enviado": "={{ $('Preparar Envio Resposta').item.json.status_atual }}",
+            "Ultimo status enviado?": "SIM"
           },
           "matchingColumns": ["ID Caso"],
           "schema": [
@@ -176,6 +177,15 @@
             {
               "id": "Ultimo Status Enviado",
               "displayName": "Ultimo Status Enviado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "Ultimo status enviado?",
+              "displayName": "Ultimo status enviado?",
               "required": false,
               "defaultMatch": false,
               "display": true,
@@ -246,7 +256,6 @@
       "position": [1500, 520],
       "id": "enviar-email-bv-0001-0002-0003-04",
       "name": "Enviar Email BV",
-      "alwaysOutputData": true,
       "credentials": {
         "microsoftOutlookOAuth2Api": {
           "id": "N5oYhQr6IkmOBT8r",
@@ -275,7 +284,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ID Caso": "={{ $('Preparar Resposta BV').item.json.id_caso }}",
-            "Protocolo BV Enviado": "=SIM"
+            "Protocolo BV Enviado": "SIM"
           },
           "matchingColumns": ["ID Caso"],
           "schema": [
@@ -366,7 +375,8 @@
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
-    "callerPolicy": "workflowsFromSameOwner"
+    "callerPolicy": "workflowsFromSameOwner",
+    "maxConcurrency": 1
   },
   "pinData": {},
   "active": false,
