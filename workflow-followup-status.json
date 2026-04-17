@@ -107,7 +107,7 @@
           "parameters": [
             {
               "name": "$filter",
-              "value": "={{ (() => { const tid = $json.thread_id_ref || ''; return (tid && tid.startsWith('<')) ? `internetMessageId eq '${tid}'` : `id eq 'noop'`; })() }}"
+              "value": "={{ `startsWith(subject,'[SUBIR BV] ${$json.id_caso}')` }}"
             },
             {
               "name": "$select",
@@ -139,7 +139,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const msgs = $json.value;\nconst d = $('Montar Corpo do E-mail').item.json;\nconst threadId = (d.thread_id_ref || '').trim();\n\nlet originalId;\nif (msgs && msgs.length > 0) {\n  // ID antigo formato <...>: resultado da busca por internetMessageId\n  originalId = msgs[0].id;\n  console.log('Status: usando Graph ID via busca:', originalId, '| caso:', d.id_caso);\n} else if (threadId && !threadId.startsWith('<')) {\n  // Novo formato: Graph message ID armazenado diretamente\n  originalId = threadId;\n  console.log('Status: usando Graph ID direto do Thread ID:', originalId, '| caso:', d.id_caso);\n} else {\n  console.log('AVISO: Sem Thread ID valido para status', d.id_caso);\n  return [];\n}\n\nreturn [{\n  json: {\n    ...d,\n    original_message_id: originalId,\n    id_caso:      d.id_caso    || d['ID Caso'] || '',\n    status_atual: d.status_atual || '',\n    reply_body: {\n      comment: '',\n      message: {\n        body: { contentType: 'Text', content: d.corpo_email },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
+        "jsCode": "const msgs = $json.value;\nconst d = $('Montar Corpo do E-mail').item.json;\nconst threadId = (d.thread_id_ref || '').trim();\n\nlet originalId;\nif (msgs && msgs.length > 0) {\n  // Busca por assunto [SUBIR BV] retornou resultado — sempre correto\n  originalId = msgs[0].id;\n  console.log('Status: ID encontrado por assunto:', originalId, '| caso:', d.id_caso);\n} else if (threadId && !threadId.startsWith('<')) {\n  // Fallback: Graph message ID armazenado na planilha\n  originalId = threadId;\n  console.log('Status: assunto nao encontrado, usando Thread ID direto:', originalId, '| caso:', d.id_caso);\n} else {\n  console.log('AVISO: Email [SUBIR BV] nao encontrado e sem Thread ID valido. Caso:', d.id_caso);\n  return [];\n}\n\nreturn [{\n  json: {\n    ...d,\n    original_message_id: originalId,\n    id_caso:      d.id_caso    || d['ID Caso'] || '',\n    status_atual: d.status_atual || '',\n    reply_body: {\n      comment: '',\n      message: {\n        body: { contentType: 'Text', content: d.corpo_email },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -262,7 +262,7 @@
           "parameters": [
             {
               "name": "$filter",
-              "value": "={{ (() => { const tid = $json['Thread ID'] || $json.thread_id_ref || ''; return (tid && tid.startsWith('<')) ? `internetMessageId eq '${tid}'` : `id eq 'noop'`; })() }}"
+              "value": "={{ `startsWith(subject,'[SUBIR BV] ${$json['ID Caso'] || $json.id_caso}')` }}"
             },
             {
               "name": "$select",
@@ -294,7 +294,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const msgs = $json.value;\nconst d = $('VERIFICAR_PROTOCOLO_BV').item.json;\nconst threadId = (d['Thread ID'] || d.thread_id_ref || '').trim();\n\nlet originalId;\nif (msgs && msgs.length > 0) {\n  // ID antigo formato <...>: resultado da busca por internetMessageId\n  originalId = msgs[0].id;\n  console.log('BV: usando Graph ID via busca:', originalId, '| caso:', d['ID Caso'] || '');\n} else if (threadId && !threadId.startsWith('<')) {\n  // Novo formato: Graph message ID armazenado diretamente\n  originalId = threadId;\n  console.log('BV: usando Graph ID direto do Thread ID:', originalId, '| caso:', d['ID Caso'] || '');\n} else {\n  console.log('AVISO: Sem Thread ID valido para BV', d['ID Caso'] || '');\n  return [];\n}\n\nconst saudacao  = d.saudacao  || 'Prezado(a)';\nconst protoBV   = d.protocolo_bv || '';\n\nconst corpo =\n  saudacao + ',\\n\\n' +\n  'Informamos que o protocolo BV do seu caso foi registrado com sucesso. ' +\n  'Nossa equipe segue acompanhando e retornará com atualizações.\\n\\n' +\n  'Protocolo BV: ' + protoBV + '\\n\\n\\n' +\n  'Atenciosamente,';\n\nconsole.log('Preparando e-mail BV para', d.email_destinatario, '| protocolo:', protoBV);\n\nreturn [{\n  json: {\n    ...d,\n    original_message_id: originalId,\n    id_caso: d['ID Caso'] || '',\n    protocolo_bv: protoBV,\n    reply_body: {\n      comment: '',\n      message: {\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
+        "jsCode": "const msgs = $json.value;\nconst d = $('VERIFICAR_PROTOCOLO_BV').item.json;\nconst idCaso = d['ID Caso'] || '';\nconst threadId = (d['Thread ID'] || d.thread_id_ref || '').trim();\n\nlet originalId;\nif (msgs && msgs.length > 0) {\n  // Busca por assunto [SUBIR BV] retornou resultado — sempre correto\n  originalId = msgs[0].id;\n  console.log('BV: ID encontrado por assunto:', originalId, '| caso:', idCaso);\n} else if (threadId && !threadId.startsWith('<')) {\n  // Fallback: Graph message ID armazenado na planilha\n  originalId = threadId;\n  console.log('BV: assunto nao encontrado, usando Thread ID direto:', originalId, '| caso:', idCaso);\n} else {\n  console.log('AVISO: Email [SUBIR BV] nao encontrado e sem Thread ID valido. Caso:', idCaso);\n  return [];\n}\n\nconst saudacao  = d.saudacao  || 'Prezado(a)';\nconst protoBV   = d.protocolo_bv || '';\n\nconst corpo =\n  saudacao + ',\\n\\n' +\n  'Informamos que o protocolo BV do seu caso foi registrado com sucesso. ' +\n  'Nossa equipe segue acompanhando e retornará com atualizações.\\n\\n' +\n  'Protocolo BV: ' + protoBV + '\\n\\n\\n' +\n  'Atenciosamente,';\n\nconsole.log('Preparando e-mail BV para', d.email_destinatario, '| protocolo:', protoBV);\n\nreturn [{\n  json: {\n    ...d,\n    original_message_id: originalId,\n    id_caso: d['ID Caso'] || '',\n    protocolo_bv: protoBV,\n    reply_body: {\n      comment: '',\n      message: {\n        body: { contentType: 'Text', content: corpo },\n        toRecipients: [{ emailAddress: { address: d.email_destinatario } }],\n        ccRecipients:  [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n      }\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
