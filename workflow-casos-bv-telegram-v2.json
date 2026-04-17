@@ -1,0 +1,369 @@
+{
+  "name": "CASOS_BV_TELEGRAM",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": { "download": false }
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [-64, -64],
+      "id": "65c6bb83-9b16-46b5-847b-380650f9969c",
+      "name": "CASOS_CRITICOS",
+      "webhookId": "2b0b47ad-c369-4bd2-8797-7b92fe770144",
+      "credentials": {
+        "telegramApi": {
+          "id": "UoRr5v5X0RduTviy",
+          "name": "CASOS_CRITICOS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const DATASTORE_KEY = \"contador_casos_criticos\";\nconst dataStore = $getWorkflowStaticData('global');\nif (!dataStore[DATASTORE_KEY]) dataStore[DATASTORE_KEY] = 0;\ndataStore[DATASTORE_KEY]++;\nconst contador = dataStore[DATASTORE_KEY];\n\nlet idCaso = \"CRIT-\" + String(contador).padStart(4, \"0\");\nlet protocoloBV = \"\";\n\nconst mensagem = $json.message.text;\nconst partes = mensagem.split(\"\\n\");\nconst match = mensagem.match(/(CRIT-\\d+)\\s+BV\\s+(\\d+)/i);\nif (match) { idCaso = match[1]; protocoloBV = match[2]; }\n\nfunction limparTexto(texto, regex) {\n  if (!texto) return \"\";\n  return texto.replace(regex, \"\").trim();\n}\n\nconst protocolo = limparTexto(partes[0], /Protocolo\\s*N1\\s*:/i);\nconst cliente   = limparTexto(partes[1], /Código\\s*Cliente\\s*:/i);\nconst assunto   = limparTexto(partes[2], /Assunto\\s*Caso\\s*:/i);\nconst descricao = limparTexto(partes[3], /Detalhamento\\s*Caso\\s*:/i);\n\nconst timestamp = $json.message.date;\nconst dataObj   = new Date(timestamp * 1000);\nconst data      = dataObj.toLocaleDateString(\"pt-BR\", { timeZone: \"America/Sao_Paulo\" });\nconst hora      = dataObj.toLocaleTimeString(\"pt-BR\", { timeZone: \"America/Sao_Paulo\" });\n\n// Nome completo (first_name + last_name) para match com MAPA_EMAILS\nconst firstName  = ($json.message.from.first_name || '').trim();\nconst lastName   = ($json.message.from.last_name  || '').trim();\nconst responsavel = [firstName, lastName].filter(Boolean).join(' ');\n\nreturn [{ json: {\n  ID_Caso: idCaso,\n  Protocolo_BV: protocoloBV,\n  Data_Abertura: data,\n  Hora_Abertura: hora,\n  Protocolo: protocolo,\n  Codigo_Cliente: cliente,\n  Assunto: assunto,\n  Descricao: descricao,\n  Responsavel: responsavel,\n  Status: \"Aberto\",\n  Dias_Aberto: 0,\n  Timestamp_Abertura: timestamp\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [160, -64],
+      "id": "b51be898-606c-49b2-88ed-059058d761c4",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
+          "mode": "list",
+          "cachedResultName": "CASOS_CRITICOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Página1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Protocolo BV":        "={{$json[\"Protocolo_BV\"]}}",
+            "ID Caso":             "={{ $json.ID_Caso }}",
+            "Data Abertura":       "={{ $json.Data_Abertura }}",
+            "Hora Abertura":       "={{ $json.Hora_Abertura }}",
+            "Protocolo N1":        "={{ $json.Protocolo }}",
+            "Código Cliente":     "={{ $json.Codigo_Cliente }}",
+            "Assunto":             "={{ $json.Assunto }}",
+            "Descrição":         "={{ $json.Descricao }}",
+            "Responsável":        "={{ $json.Responsavel }}",
+            "Status":              "={{ $json.Status }}",
+            "Ultimo Status Enviado": "Aberto"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "ID Caso",               "displayName": "ID Caso",               "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Thread ID",             "displayName": "Thread ID",             "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Protocolo BV",          "displayName": "Protocolo BV",          "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Data Abertura",         "displayName": "Data Abertura",         "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Hora Abertura",         "displayName": "Hora Abertura",         "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Protocolo N1",          "displayName": "Protocolo N1",          "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Código Cliente",       "displayName": "Código Cliente",       "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Assunto",               "displayName": "Assunto",               "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Descrição",           "displayName": "Descrição",           "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Responsável",          "displayName": "Responsável",          "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Status",               "displayName": "Status",               "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Ultimo Status Enviado", "displayName": "Ultimo Status Enviado", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [384, -64],
+      "id": "1ee97524-d544-4f35-aff8-1651bdeb70cc",
+      "name": "PLANILHA_ACOMPANHAMENTO",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const MAPA_EMAILS = {\n  'Rodrigo Bertolini': 'rodrigo.bertolini@fazcapital.com.br',\n  'Lucas Boeira':      'lucas.boeira@fazcapital.com.br',\n  'Allini Pianca':     'allini.pianca@fazcapital.com.br',\n  'Athos Baruk':       'athos.baruk@fazcapital.com.br',\n  'Fabio Borges':      'fabio.borges@fazcapital.com.br'\n};\n\nfunction findEmail(nome) {\n  if (!nome) return '';\n  if (MAPA_EMAILS[nome]) return MAPA_EMAILS[nome];\n  const nomeLower = nome.toLowerCase();\n  for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n    const chaveLower = chave.toLowerCase();\n    if (chaveLower.includes(nomeLower)) return email;\n    if (chave.split(' ').some(p => p.toLowerCase() === nomeLower)) return email;\n  }\n  // Fallback: busca pelo primeiro nome\n  const primeiroInput = nomeLower.split(' ')[0];\n  if (primeiroInput) {\n    for (const [chave, email] of Object.entries(MAPA_EMAILS)) {\n      if (chave.split(' ')[0].toLowerCase() === primeiroInput) return email;\n    }\n  }\n  return '';\n}\n\nconst responsavelRaw = (\n  $json['Responsável'] || $json['Responsavel'] || ''\n).split('|')[0].trim();\n\n// Estrategia 1: extrai email diretamente do campo\n// (formato Telegram: first_name=email, last_name=nome)\nconst emailNosCampo = (responsavelRaw.match(/([\\w.+-]+@[\\w.-]+\\.[\\w]+)/) || [])[1] || '';\n\n// Estrategia 2 (fallback): lookup pelo nome sem o email\nconst nomeSemEmail = responsavelRaw.replace(/[\\w.+-]+@[\\w.-]+\\.[\\w]+/g, '').trim();\n\nconst emailDest = emailNosCampo || findEmail(nomeSemEmail);\n\nif (!emailDest) {\n  console.log('AVISO: email nao encontrado. Campo Responsavel:', JSON.stringify(responsavelRaw));\n  return [];\n}\n\nconst idCaso    = $json['ID Caso']         || $json['ID_Caso']        || '';\nconst status    = $json['Status']                                      || 'Aberto';\nconst protocolo = $json['Protocolo N1']    || $json['Protocolo']      || '';\nconst cliente   = $json['Código Cliente']  || $json['Codigo_Cliente'] || '';\nconst assunto   = $json['Assunto']                                     || '';\nconst descricao = $json['Descrição']       || $json['Descricao']      || '';\n\nconst corpo =\n  'Prezado(a),\\n\\n' +\n  '🚨 Caso Crítico registrado! \\n\\n' +\n  'As tratativas e atualizações deste caso serão realizadas por este e-mail.\\n\\n' +\n  'Caso possua anexos ou novas informações, envie por este e-mail para registrar e complementar o caso.\\n\\n\\n\\n' +\n  'ID: '       + idCaso    + '\\n' +\n  'Status: '   + status    + '\\n\\n' +\n  '📌 Protocolo: ' + protocolo + '\\n' +\n  '👤 Cliente: '   + cliente   + '\\n\\n' +\n  '📝 Assunto Caso: ' + assunto  + '\\n\\n' +\n  '📄 Descrição: ' + descricao + '\\n\\n\\n\\n\\nAtenciosamente,\\n\\n';\n\nreturn [{\n  json: {\n    ...$json,\n    id_caso_ref: idCaso,\n    email_destinatario: emailDest,\n    draft_body: {\n      subject: '[SUBIR BV] ' + idCaso + ' | Cliente ' + cliente + ' | ' + assunto,\n      body: { contentType: 'Text', content: corpo },\n      toRecipients: [{ emailAddress: { address: emailDest } }],\n      ccRecipients: [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' } }]\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [608, -64],
+      "id": "cc11dd22-ee33-4444-5555-666677778888",
+      "name": "PREPARAR_EMAIL"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.draft_body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [832, -64],
+      "id": "aa11bb22-cc33-4444-dddd-eeee11112222",
+      "name": "CRIAR_EMAIL",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Captura o internetMessageId do draft ANTES de enviar.\n// internetMessageId é o Message-ID RFC 2822 — estável e único para cada e-mail.\n// Após ENVIAR_EMAIL (202 No Content), $json fica vazio, por isso salvamos aqui.\nconst messageId         = $json.id                || '';\nconst internetMessageId = $json.internetMessageId || '';\nconst idCaso            = $('PREPARAR_EMAIL').item.json.id_caso_ref || '';\n\nif (!messageId) {\n  throw new Error('CRIAR_EMAIL nao retornou o ID da mensagem. Verifique as credenciais do Outlook.');\n}\n\nif (!internetMessageId) {\n  console.log('AVISO: internetMessageId nao encontrado na resposta do Graph API.');\n}\n\nconsole.log('Internet Message ID capturado:', internetMessageId);\nconsole.log('ID Caso ref:', idCaso);\n\nreturn [{ json: {\n  message_id: messageId,\n  thread_id:  internetMessageId,\n  id_caso:    idCaso\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, -64],
+      "id": "c1d2e3f4-a5b6-7890-cdef-012345678901",
+      "name": "CAPTURAR_THREAD_ID"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.microsoft.com/v1.0/me/messages/{{ $json.message_id }}/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1220, -64],
+      "id": "ff11aa22-bb33-4444-cccc-dddd55556666",
+      "name": "ENVIAR_EMAIL",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
+          "mode": "list",
+          "cachedResultName": "CASOS_CRITICOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Página1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID Caso":   "={{ $('CAPTURAR_THREAD_ID').item.json.id_caso }}",
+            "Thread ID": "={{ $('CAPTURAR_THREAD_ID').item.json.message_id }}"
+          },
+          "matchingColumns": ["ID Caso"],
+          "schema": [
+            { "id": "ID Caso",   "displayName": "ID Caso",   "required": true,  "defaultMatch": true,  "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Thread ID", "displayName": "Thread ID", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1420, -64],
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "SALVAR_THREAD_ID",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function addBusinessDays(days) {\n  const date = new Date();\n  let added = 0;\n  while (added < days) {\n    date.setDate(date.getDate() + 1);\n    const dow = date.getDay();\n    if (dow !== 0 && dow !== 6) added++;\n  }\n  return date;\n}\n\nconst prep     = $('PREPARAR_EMAIL').item.json;\nconst idCaso   = prep.id_caso_ref || '';\nconst cliente  = prep['Código Cliente'] || prep['Codigo_Cliente'] || '';\nconst emailDest = prep.email_destinatario || '';\n\nconst prazoDate = addBusinessDays(2);\nconst pad = n => String(n).padStart(2, '0');\nconst prazoISO = prazoDate.getFullYear() + '-' + pad(prazoDate.getMonth() + 1) + '-' + pad(prazoDate.getDate());\n\nconsole.log('Evento cobranca D+2 para', idCaso, ':', prazoISO);\n\nconst attendees = [{ emailAddress: { address: 'lucas.boeira@fazcapital.com.br' }, type: 'required' }];\n\nreturn [{\n  json: {\n    id_caso: idCaso,\n    event_cobranca: {\n      subject: '⏰ Cobrança — ' + idCaso + ' | Cliente ' + cliente,\n      start: { dateTime: prazoISO + 'T09:00:00', timeZone: 'America/Sao_Paulo' },\n      end:   { dateTime: prazoISO + 'T09:30:00', timeZone: 'America/Sao_Paulo' },\n      body: {\n        contentType: 'Text',\n        content: 'Prazo de cobrança (D+2 úteis).\\n\\n⚠️ Se o caso não foi resolvido, escale para a área de líderes de atendimento (BDO).'\n      },\n      attendees: attendees,\n      isReminderOn: true,\n      reminderMinutesBeforeStart: 60\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1620, -64],
+      "id": "tg-calc-prazo-0001-0002-0003-04",
+      "name": "CALCULAR_PRAZO_COBRANCA"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.event_cobranca) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1820, -64],
+      "id": "tg-criar-evento-0001-0002-0003-04",
+      "name": "CRIAR_EVENTO_COBRANCA",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg",
+          "mode": "list",
+          "cachedResultName": "CASOS_CRITICOS",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Página1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/11ca5cl4hw7-SbLRlEvx1uzbyza6t0ey8O31pvZYq9yg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID Caso":        "={{ $('CALCULAR_PRAZO_COBRANCA').item.json.id_caso }}",
+            "Invite Enviado": "SIM"
+          },
+          "matchingColumns": ["ID Caso"],
+          "schema": [
+            {
+              "id": "ID Caso",
+              "displayName": "ID Caso",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Invite Enviado",
+              "displayName": "Invite Enviado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2020, -64],
+      "id": "tg-atualizar-invite-0001-0002-0003-04",
+      "name": "Atualizar Invite Enviado",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "iCtWo6EifTat6VhP",
+          "name": "CASOS_CRITICOS"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('CASOS_CRITICOS').item.json.message.chat.id }}",
+        "text": "=🚨 Caso crítico registrado\n\nID: {{ $('CAPTURAR_THREAD_ID').item.json.id_caso }}\nEquipe acionada.",
+        "additionalFields": { "appendAttribution": false }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2220, -64],
+      "id": "720f7e54-3461-44e7-b0ae-1e911cbfb0b3",
+      "name": "MENSAGEM CHAMADO ABERTO2",
+      "webhookId": "057e9a18-1a88-4451-be7f-ce185dfb62c1",
+      "credentials": {
+        "telegramApi": {
+          "id": "UoRr5v5X0RduTviy",
+          "name": "CASOS_CRITICOS"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "CASOS_CRITICOS": {
+      "main": [[{ "node": "Code in JavaScript",     "type": "main", "index": 0 }]]
+    },
+    "Code in JavaScript": {
+      "main": [[{ "node": "PLANILHA_ACOMPANHAMENTO", "type": "main", "index": 0 }]]
+    },
+    "PLANILHA_ACOMPANHAMENTO": {
+      "main": [[{ "node": "PREPARAR_EMAIL",          "type": "main", "index": 0 }]]
+    },
+    "PREPARAR_EMAIL": {
+      "main": [[{ "node": "CRIAR_EMAIL",             "type": "main", "index": 0 }]]
+    },
+    "CRIAR_EMAIL": {
+      "main": [[{ "node": "CAPTURAR_THREAD_ID",      "type": "main", "index": 0 }]]
+    },
+    "CAPTURAR_THREAD_ID": {
+      "main": [[{ "node": "ENVIAR_EMAIL",            "type": "main", "index": 0 }]]
+    },
+    "ENVIAR_EMAIL": {
+      "main": [[{ "node": "SALVAR_THREAD_ID",        "type": "main", "index": 0 }]]
+    },
+    "SALVAR_THREAD_ID": {
+      "main": [[{ "node": "CALCULAR_PRAZO_COBRANCA", "type": "main", "index": 0 }]]
+    },
+    "CALCULAR_PRAZO_COBRANCA": {
+      "main": [[{ "node": "CRIAR_EVENTO_COBRANCA",   "type": "main", "index": 0 }]]
+    },
+    "CRIAR_EVENTO_COBRANCA": {
+      "main": [[{ "node": "Atualizar Invite Enviado", "type": "main", "index": 0 }]]
+    },
+    "Atualizar Invite Enviado": {
+      "main": [[{ "node": "MENSAGEM CHAMADO ABERTO2", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "ee46f49e-a7ce-48da-b4b1-41262b26d091",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b69dfcd0984e3e236a8f86c472503821acc73b04843aefeb76fa1aba528327d6"
+  },
+  "id": "mS7WmhoguA0H0SeS",
+  "tags": []
+}
