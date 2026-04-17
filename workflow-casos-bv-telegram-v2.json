@@ -158,6 +158,26 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://graph.microsoft.com/v1.0/me/mailFolders/SentItems/messages/' + $('CAPTURAR_THREAD_ID').item.json.message_id + '?$select=internetMessageHeaders' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOutlookOAuth2Api",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -64],
+      "id": "buscar-thread-idx-0001-0002-0003-04",
+      "name": "BUSCAR_THREAD_INDEX",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "N5oYhQr6IkmOBT8r",
+          "name": "E-mail LucasOperacional"
+        }
+      }
+    },
+    {
+      "parameters": {
         "operation": "update",
         "documentId": {
           "__rl": true,
@@ -177,7 +197,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "ID Caso":   "={{ $('CAPTURAR_THREAD_ID').item.json.id_caso }}",
-            "Thread ID": "={{ $('CAPTURAR_THREAD_ID').item.json.message_id }}"
+            "Thread ID": "={{ ($json.internetMessageHeaders || []).find(h => h.name === 'Thread-Index')?.value || '' }}"
           },
           "matchingColumns": ["ID Caso"],
           "schema": [
@@ -336,6 +356,9 @@
       "main": [[{ "node": "ENVIAR_EMAIL",            "type": "main", "index": 0 }]]
     },
     "ENVIAR_EMAIL": {
+      "main": [[{ "node": "BUSCAR_THREAD_INDEX",     "type": "main", "index": 0 }]]
+    },
+    "BUSCAR_THREAD_INDEX": {
       "main": [[{ "node": "SALVAR_THREAD_ID",        "type": "main", "index": 0 }]]
     },
     "SALVAR_THREAD_ID": {
