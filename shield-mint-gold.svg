@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500">
+<defs>
+  <clipPath id="ic">
+    <circle cx="250" cy="250" r="182"/>
+  </clipPath>
+  <path id="t1" d="M 36,250 A 214,214 0 0,0 464,250"/>
+  <path id="t2" d="M 40,250 A 210,210 0 0,1 460,250"/>
+  <linearGradient id="ag" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%"   stop-color="#7A5C10"/>
+    <stop offset="18%"  stop-color="#C9A84C"/>
+    <stop offset="40%"  stop-color="#F0E090"/>
+    <stop offset="55%"  stop-color="#C9A84C"/>
+    <stop offset="80%"  stop-color="#A88030"/>
+    <stop offset="100%" stop-color="#7A5C10"/>
+  </linearGradient>
+</defs>
+
+<!-- Outer circle – dark forest / mint -->
+<circle cx="250" cy="250" r="241" fill="#0C3528"/>
+<circle cx="250" cy="250" r="241" fill="none" stroke="#C9A84C" stroke-width="7"/>
+<circle cx="250" cy="250" r="226" fill="none" stroke="#C9A84C" stroke-width="2"/>
+
+<!-- Inner mint circle -->
+<circle cx="250" cy="250" r="185" fill="#1D8F6A"/>
+
+<!-- Dark vertical stripes -->
+<rect x="213" y="62" width="28" height="376" fill="#07221A" clip-path="url(#ic)"/>
+<rect x="259" y="62" width="28" height="376" fill="#07221A" clip-path="url(#ic)"/>
+
+<!-- Inner gold ring -->
+<circle cx="250" cy="250" r="185" fill="none" stroke="#C9A84C" stroke-width="5"/>
+
+<!-- Stylised A -->
+<path fill-rule="evenodd" fill="url(#ag)" clip-path="url(#ic)" d="
+  M 200,118 L 300,118 L 392,400 L 108,400 Z
+  M 250,160 L 304,252 L 196,252 Z
+  M 196,270 L 304,270 L 376,400 L 124,400 Z
+"/>
+
+<!-- Decorative side dashes – left -->
+<line x1="15" y1="237" x2="41" y2="237" stroke="#C9A84C" stroke-width="6" stroke-linecap="round"/>
+<line x1="19" y1="253" x2="39" y2="253" stroke="#C9A84C" stroke-width="4" stroke-linecap="round"/>
+<line x1="19" y1="267" x2="39" y2="267" stroke="#C9A84C" stroke-width="4" stroke-linecap="round"/>
+
+<!-- Decorative side dashes – right -->
+<line x1="459" y1="237" x2="485" y2="237" stroke="#C9A84C" stroke-width="6" stroke-linecap="round"/>
+<line x1="461" y1="253" x2="481" y2="253" stroke="#C9A84C" stroke-width="4" stroke-linecap="round"/>
+<line x1="461" y1="267" x2="481" y2="267" stroke="#C9A84C" stroke-width="4" stroke-linecap="round"/>
+
+<!-- ABSOLUT – outline then fill -->
+<text font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="37"
+      fill="none" stroke="#0C3528" stroke-width="7" letter-spacing="3">
+  <textPath href="#t1" startOffset="50%" text-anchor="middle">ABSOLUT</textPath>
+</text>
+<text font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="37"
+      fill="#C9A84C" letter-spacing="3">
+  <textPath href="#t1" startOffset="50%" text-anchor="middle">ABSOLUT</textPath>
+</text>
+
+<!-- UNITED FC – outline then fill -->
+<text font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="32"
+      fill="none" stroke="#0C3528" stroke-width="6" letter-spacing="3">
+  <textPath href="#t2" startOffset="50%" text-anchor="middle">UNITED FC</textPath>
+</text>
+<text font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="32"
+      fill="#C9A84C" letter-spacing="3">
+  <textPath href="#t2" startOffset="50%" text-anchor="middle">UNITED FC</textPath>
+</text>
+</svg>
